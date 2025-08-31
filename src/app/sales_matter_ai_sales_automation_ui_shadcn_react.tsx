@@ -1,5 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
+import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -179,7 +180,14 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
   return (
     <div className="h-full w-[240px] border-r bg-background/60 backdrop-blur p-3 hidden md:block">
       <div className="flex items-center gap-2 px-2 pb-4">
-        <Badge variant="secondary" className="rounded-2xl px-3 py-1">SalesMatter</Badge>
+        <Image 
+          src="/salesMattertm (1).png" 
+          alt="SalesMatter Logo" 
+          width={180} 
+          height={60}
+          className="h-12 w-auto"
+          priority
+        />
       </div>
       <nav className="space-y-1">
         {items.map((it) => (
