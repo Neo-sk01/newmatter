@@ -453,6 +453,26 @@ function ImportScreen({
   onConnectCRM: (provider: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const f = e.dataTransfer?.files?.[0];
+    if (f) onImportCSV(f);
+  };
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    setDragActive(true);
+  };
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
@@ -462,6 +482,26 @@ function ImportScreen({
           <CardDescription>Import leads from spreadsheets. Column mapping is automatic with manual override.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div
+            className={cx(
+              "rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors",
+              "bg-muted/20 hover:bg-muted/30",
+              dragActive && "border-ring bg-accent/40"
+            )}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileRef.current?.click()}
+            role="button"
+            aria-label="Drop CSV file here or click to browse"
+          >
+            <div className="flex flex-col items-center gap-2">
+              <Upload className="h-6 w-6 text-muted-foreground" />
+              <div className="font-medium">Drag & drop CSV here</div>
+              <div className="text-xs text-muted-foreground">or click to browse · .csv only</div>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <Input ref={fileRef} type="file" accept=".csv" className="rounded-xl" />
             <Button
