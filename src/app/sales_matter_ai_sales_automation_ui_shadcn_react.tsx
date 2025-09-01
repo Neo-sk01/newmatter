@@ -75,7 +75,10 @@ import {
   StopCircle,
   Upload,
   Users2,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import {
   Area,
   AreaChart,
@@ -214,6 +217,8 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
 }
 
 function Topbar() {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const isDark = (resolvedTheme ?? theme) === "dark";
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-background/70 backdrop-blur px-4 py-2">
       <div className="flex items-center gap-2">
@@ -232,6 +237,21 @@ function Topbar() {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-xl"
+                onClick={() => setTheme(isDark ? "light" : "dark")}
+              >
+                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{isDark ? "Light mode" : "Dark mode"}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="rounded-xl">
@@ -489,6 +509,7 @@ function GenerateScreen({
   setSubject,
   preview,
   onGenerate,
+  lead,
 }: {
   template: string;
   setTemplate: (v: string) => void;
@@ -496,8 +517,56 @@ function GenerateScreen({
   setSubject: (v: string) => void;
   preview: string;
   onGenerate: () => void;
+  lead: Lead | null;
 }) {
   const tokens = ["firstName", "lastName", "company", "title", "website"];
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiText, setAiText] = useState("");
+
+  const handleAIGenerate = async () => {
+    setAiError(null);
+    setAiText("");
+    setAiLoading(true);
+    const prompt = `You are a skilled B2B SDR. Write a concise, high-converting, personalized cold outreach email.
+
+Lead details:
+- First name: ${lead?.firstName ?? ""}
+- Last name: ${lead?.lastName ?? ""}
+- Company: ${lead?.company ?? ""}
+- Title: ${lead?.title ?? ""}
+- Website: ${lead?.website ?? ""}
+
+Subject hint: ${subject}
+Body template (use as guidance; improve clarity and persuasion, avoid placeholders):
+${template}
+
+Output format exactly:
+Subject: <one compelling subject line>
+Body:
+<email body in 2-3 short paragraphs, <120 words, no signature>`;
+    try {
+      const res = await fetch("/api/generate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+      if (!res.ok || !res.body) throw new Error("Request failed");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        const chunkValue = decoder.decode(value || new Uint8Array(), { stream: true });
+        if (chunkValue) setAiText((prev) => prev + chunkValue);
+      }
+    } catch (e) {
+      setAiError("Failed to generate. Please try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <Card className="rounded-2xl lg:col-span-2">
@@ -532,11 +601,30 @@ function GenerateScreen({
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Live Preview</CardTitle>
-          <CardDescription>Example output using the first lead.</CardDescription>
+          <CardDescription>AI stream or token-filled preview</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <div className="flex gap-2">
+            <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
+              {aiLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+                </>
+              ) : (
+                <>
+                  <BrainCircuit className="mr-2 h-4 w-4" /> Generate with AI
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={onGenerate} disabled={aiLoading} className="rounded-xl">
+              <Play className="mr-2 h-4 w-4" /> Token fill (local)
+            </Button>
+          </div>
+          {aiError && (
+            <div className="text-sm text-destructive">{aiError}</div>
+          )}
           <div className="prose prose-sm dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap rounded-2xl border p-3 bg-muted/30">{preview || "(Preview will appear here)"}</pre>
+            <pre className="whitespace-pre-wrap rounded-2xl border p-3 bg-muted/30">{aiText || preview || "(Preview will appear here)"}</pre>
           </div>
         </CardContent>
       </Card>
@@ -1080,6 +1168,7 @@ export default function SalesAutomationUI() {
                 setSubject={setSubject}
                 preview={preview}
                 onGenerate={runGeneration}
+                lead={leads[0] ?? null}
               />
             )}
 
