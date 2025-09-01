@@ -1,5 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
+import Papa from "papaparse";
 import Image from "next/image";
 import {
   Card,
@@ -301,6 +302,114 @@ const tokenFill = (template: string, lead: Lead) =>
 
 const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
 
+// Apply LLM-provided mapping rules to a CSV row
+function applyMapping(
+  row: Record<string, any>,
+  headerMapping: Record<string, string>,
+  rules?: { splitFullName?: { column: string; firstNameFirst?: boolean } }
+) {
+  const out: {
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    email?: string;
+    title?: string | null;
+    website?: string | null;
+    linkedin?: string | null;
+  } = {};
+
+  const get = (k: string) => {
+    const v = row[k];
+    if (v == null) return "";
+    return String(v).trim();
+  };
+
+  const normalizeUrl = (v: string) => {
+    if (!v) return "";
+    let s = v.trim();
+    if (!/^https?:\/\//i.test(s)) {
+      s = s.startsWith("www.") ? `https://${s}` : `https://${s}`;
+    }
+    return s;
+  };
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  for (const [col, field] of Object.entries(headerMapping || {})) {
+    if (!field || field === "ignore") continue;
+    const value = get(col);
+    if (!value) continue;
+    switch (field) {
+      case "firstName":
+        out.firstName = value;
+        break;
+      case "lastName":
+        out.lastName = value;
+        break;
+      case "company":
+        out.company = value;
+        break;
+      case "email":
+        if (emailRe.test(value.toLowerCase())) out.email = value.toLowerCase();
+        break;
+      case "title":
+        out.title = value;
+        break;
+      case "website":
+        out.website = normalizeUrl(value);
+        break;
+      case "linkedin":
+        out.linkedin = normalizeUrl(value);
+        break;
+    }
+  }
+
+  if ((!out.firstName || !out.lastName) && rules?.splitFullName?.column) {
+    const full = get(rules.splitFullName.column);
+    if (full) {
+      const parts = full.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) {
+        out.firstName ??= parts[0];
+      } else if (parts.length >= 2) {
+        const firstIdx = rules.splitFullName.firstNameFirst === false ? parts.length - 1 : 0;
+        const lastIdx = rules.splitFullName.firstNameFirst === false ? 0 : parts.length - 1;
+        out.firstName ??= parts[firstIdx];
+        out.lastName ??= parts.slice(lastIdx).join(" ");
+      }
+    }
+  }
+
+  return out;
+}
+
+// Heuristic fallback if LLM mapping is unavailable
+function guessHeaderMapping(columns: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const candidates: Record<string, string[]> = {
+    firstName: ["firstname", "first", "givenname", "fname"],
+    lastName: ["lastname", "last", "surname", "lname"],
+    company: ["company", "organisation", "organization", "org", "employer"],
+    email: ["email", "e-mail", "mail"],
+    title: ["title", "role", "position", "jobtitle"],
+    website: ["website", "site", "url", "domain"],
+    linkedin: ["linkedin", "linkedinurl", "linkedinprofile", "li"],
+  };
+  for (const col of columns) {
+    const n = norm(col);
+    let matched = false;
+    for (const [field, syns] of Object.entries(candidates)) {
+      if (syns.some((s) => n.includes(s))) {
+        map[col] = field;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) map[col] = "ignore";
+  }
+  return map;
+}
+
 // ----------------------------------------------
 // Subcomponents
 // ----------------------------------------------
@@ -503,7 +612,16 @@ function ImportScreen({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Input ref={fileRef} type="file" accept=".csv" className="rounded-xl" />
+            <Input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              className="rounded-xl"
+              onChange={(e) => {
+                const f = e.currentTarget.files?.[0];
+                if (f) onImportCSV(f);
+              }}
+            />
             <Button
               className="rounded-xl"
               onClick={() => {
@@ -1284,16 +1402,83 @@ export default function SalesAutomationUI() {
   }, [subject, template, leads]);
 
   const onImportCSV = async (file: File) => {
-    // Demo: append a mock row after a brief delay
-    const text = await file.text();
-    console.log("Imported CSV sample:", text.slice(0, 80));
-    const id = String(Date.now());
-    setLeads((prev) => [
-      ...prev,
-      { id, firstName: "Taylor", lastName: "Nkosi", company: "Example Pty", email: "taylor@example.com", title: "Ops Manager", website: "https://example.com", status: "new" },
-    ]);
-    // Navigate to LinkedIn enrichment after import
-    setSection("enrich");
+    try {
+      // 1) Parse CSV on the client
+      const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
+        Papa.parse<Record<string, any>>(file, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h: string) => String(h || "").trim(),
+          complete: (res: Papa.ParseResult<Record<string, any>>) => resolve(res),
+          error: (err: any) => reject(err),
+        });
+      });
+
+      const rows = (parsed.data || []).filter((r) => r && Object.keys(r).length > 0);
+      const columns = (parsed.meta.fields || []).filter(Boolean) as string[];
+
+      if (!rows.length || !columns.length) {
+        console.warn("CSV appears empty or has no headers");
+        return;
+      }
+
+      // 2) Ask the backend LLM to map headers and provide sample normalization
+      const resp = await fetch("/api/map-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
+      });
+
+      let headerMapping: Record<string, string> | null = null;
+      let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
+
+      if (resp.ok) {
+        const data = await resp.json();
+        headerMapping = data?.headerMapping ?? null;
+        rules = data?.rules;
+      }
+
+      if (!headerMapping) {
+        console.warn("Falling back to heuristic header mapping");
+        headerMapping = guessHeaderMapping(columns);
+      }
+
+      // 3) Apply the mapping to all rows locally
+      const mapped: Lead[] = rows
+        .map((r: Record<string, any>, idx: number) => {
+          const normalized = applyMapping(r, headerMapping!, rules);
+          const hasAny = Boolean(
+            normalized.email ||
+            normalized.linkedin ||
+            normalized.company ||
+            normalized.firstName ||
+            normalized.lastName
+          );
+          if (!hasAny) return null;
+          return {
+            id: `${Date.now()}-${idx}`,
+            firstName: normalized.firstName || "",
+            lastName: normalized.lastName || "",
+            company: normalized.company || "",
+            email: (normalized.email || "").toLowerCase(),
+            title: normalized.title || "",
+            website: normalized.website || undefined,
+            linkedin: normalized.linkedin || undefined,
+            status: "new" as const,
+          };
+        })
+        .filter(Boolean) as Lead[];
+
+      if (!mapped.length) {
+        console.warn("No valid leads produced from CSV");
+        return;
+      }
+
+      setLeads((prev) => [...prev, ...mapped]);
+      setSection("enrich");
+    } catch (err) {
+      console.error("Import failed", err);
+    }
   };
 
   const onConnectCRM = (provider: string) => {
