@@ -125,3 +125,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Make container borders more pronounced (increase ~0.5x -> ~1.5px) */
+@layer utilities {
+  .border { border-width: 1.5px; }
+  .border-b { border-bottom-width: 1.5px; }
+  .border-t { border-top-width: 1.5px; }
+  .border-l { border-left-width: 1.5px; }
+  .border-r { border-right-width: 1.5px; }
+}

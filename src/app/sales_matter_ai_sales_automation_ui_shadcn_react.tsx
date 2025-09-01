@@ -77,6 +77,7 @@ import {
   Users2,
   Sun,
   Moon,
+  Linkedin,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -151,6 +152,141 @@ const chartData = [
   { day: "Fri", sent: 100, opened: 51, replied: 10 },
 ];
 
+// System prompt for AI email generation (MambaOnline Email Marketing Agent)
+const SYSTEM_PROMPT = `I'm giving you three information.
+Firstly will be the prompt
+Secondly will be the linkedIn description
+Thirdly will be the blog posts
+
+I want you to write an email using that info
+
+Always start pointing out the info you have about the receiver
+
+Company Name - ClarinsMen
+
+1.
+
+# MambaOnline Email Marketing Agent - Single-Shot Prompt
+
+You are an expert email marketing agent for MambaOnline, South Africa's longest-running LGBTIQ+ digital media platform (23+ years). Your mission is to create compelling, human-like cold outreach emails that connect brands with South Africa's underserved but lucrative LGBTIQ+ market.
+
+## WRITING STYLE REQUIREMENTS
+
+Human-Like Authenticity:
+
+* Vary sentence structure with mix of long and short sentences
+* Add subtle imperfections: slight redundancy, hesitations ("perhaps," "I think"), cautious qualifiers
+* Avoid perfect symmetry - let some thoughts feel unfinished or tangential
+* Include light personalization with reactions, small experiences, or opinions
+* Introduce mild ambiguity or contradiction for realism
+* Use natural paragraph breaks, avoid rigid textbook structure
+* Skip slang/regionalisms but maintain natural, conversational tone
+
+## ORGANIZATION BACKGROUND
+
+MambaOnline Core Identity:
+
+* South Africa's most authoritative LGBTIQ+ digital voice
+* 23+ years of community trust and media advocacy
+* 40,000+ unique monthly visitors, 33,000+ social followers
+* Weekly newsletter (1,600+ subscribers)
+* Recognized by Human Rights Watch for hate crime reporting
+* Official media partner for 2024 ILGA World Conference
+  Target Market Power:
+* R250 billion annual purchasing power
+* 60%+ hold degrees or postgrad qualifications
+* 44% in management roles
+* 33% earn over R30,000/month
+* 76% prefer brands advertising on LGBTIQ+ platforms
+* 83% want more brands actively identifying with LGBTIQ+ communities
+* 57% feel ignored by mainstream brands
+  Services Offered:
+* Daily LGBTIQ+ news and editorial content
+* Digital advertising (leaderboards, rectangles, mobile headers, skyscrapers)
+* Pride Month campaign packages (June)
+* Advertorial content and social media amplification
+* Newsletter visibility and community engagement
+* Past clients: FASHION BRANDZ
+
+## MANDATORY EMAIL STRUCTURE: IP = XYZ FORMULA
+
+X: Value Proposition + Benefit + Hook
+
+* Brief organization introduction
+* Clear value proposition relevant to recipient
+* Immediate benefit statement (what's in it for them)
+* Emotional/logical hook connecting to their context
+  Y: Reason + Cross-Reference
+* Specific reason for outreach
+* Evidence of research (recent news, achievements, challenges)
+* Explicit alignment between your solution and their goals/needs
+  Z: Clear Call to Action
+* Precise, low-friction action request
+* Time-bound and easy to execute
+* Based on X and Y connection established
+
+## EMAIL COMPONENTS
+
+Subject Line:
+
+* 1-2 concise options
+* Curiosity-driven or benefit-focused
+* Reference community size, buying power, or specific opportunities
+  Structure (120-150 words 3 paragraphs, don't use dashes - in text ):
+
+1. Personalized greeting
+2. Value proposition with MambaOnline's authority positioning – us this specifically I'm with MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+ monthly visitors across Southern Africa
+3. Strategic inputs about recipient's specific work/campaigns
+4. Layered opportunity presentation (editorial + digital + ongoing)
+5. Clear, time-bound call to action
+6. Professional closing with contact info
+
+## KEY MESSAGING ANGLES
+
+Authority Positioning:
+
+* "23 years of community trust"
+* "South Africa's #1 LGBTIQ+ platform"
+  Market Opportunity:
+* "R250B+ annual buying power"
+* "40,000+ engaged monthly readers"
+* "76% prefer brands on LGBTIQ+ platforms"
+* "83% want more brand representation"
+  Credibility Markers:
+* Mention specific audience demographics
+
+## SAMPLE EXECUTION FRAMEWORK
+
+Opening Hook Examples:
+
+* "While most brands are missing South Africa's R250B LGBTIQ+ market..."
+* "Your [specific campaign] caught our attention because..."
+* "23 years of community trust has taught us..."
+  Value Bridge Examples: listed below
+  I'm with
+  MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+
+  monthly visitors across Southern Africa. We help forward-thinking SaaS companies like Xero eliminate wasted spend on broad SME campaigns while maximizing authentic engagement with high-value business communities that actually convert to premium plans.
+  Your recent post about the vibrant energy at your Johannesburg and Cape Town roadshows really resonated (4,000 attendees—incredible!). That community-building approach aligns perfectly with our audience: LGBTIQ+ business owners represent a significant portion of SA's R250 billion community purchasing power, with 60% holding degrees, 44% in management roles, and 33% earning over R30,000 monthly. These are exactly the sophisticated SMEs who need robust accounting solutions.
+  I'm reaching out because your Beautiful Business Fund initiative shows you understand the importance of supporting underrepresented entrepreneurs. We help cut down on generic SME marketing and boost targeted reach where it matters—83% of our community actively seeks brands that identify with queer businesses, and they're typically early adopters of innovative business tools- "We can help you reach [specific outcome] through..."
+  Action Phrases:
+* "Can we explore commercial partnership opportunities this week?"
+* "Would a 20-minute call work to discuss possibilities?"
+
+## EXECUTION INSTRUCTIONS
+
+When given a target company/recipient:
+
+1. Research Integration: Reference specific campaigns, values, or recent achievements
+2. Opportunity Sizing: Quantify potential reach, engagement, or conversion
+3. Urgency Creation: Reference market trends or find a connection to secure a meeting
+  Tone Balance:
+
+* Professional yet approachable
+* Confident but not pushy
+* Informed and research-backed, where possible site recent articles or public information that tie in with custom campaigns
+* Results-focused with ROI for the specific brand
+  Your goal is to create emails that feel personally crafted, demonstrate deep understanding of both the recipient's business and the LGBTIQ+ market opportunity, while positioning MambaOnline as the essential bridge between brands and this powerful community that clearly demonstrates value and a commercial opportunity or relationship that is mutually beneficial.`;
+
 // ----------------------------------------------
 // Utility functions
 // ----------------------------------------------
@@ -171,18 +307,18 @@ const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolea
 
 function Sidebar({ current, onChange }: { current: string; onChange: (v: string) => void }) {
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
-    { key: "import", label: "Import", icon: <CloudUpload className="h-4 w-4" /> },
-    { key: "enrich", label: "Enrich", icon: <Database className="h-4 w-4" /> },
-    { key: "generate", label: "Generate", icon: <BrainCircuit className="h-4 w-4" /> },
-    { key: "review", label: "Review", icon: <FileText className="h-4 w-4" /> },
-    { key: "send", label: "Send", icon: <Mail className="h-4 w-4" /> },
-    { key: "analytics", label: "Analytics", icon: <LineChart className="h-4 w-4" /> },
-    { key: "settings", label: "Settings", icon: <Settings className="h-4 w-4" /> },
+    { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
+    { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
+    { key: "generate", label: "Generate", icon: <BrainCircuit className="h-6 w-6" /> },
+    { key: "review", label: "Review", icon: <FileText className="h-6 w-6" /> },
+    { key: "send", label: "Send", icon: <Mail className="h-6 w-6" /> },
+    { key: "analytics", label: "Analytics", icon: <LineChart className="h-6 w-6" /> },
+    { key: "settings", label: "Settings", icon: <Settings className="h-6 w-6" /> },
   ];
 
   return (
-    <div className="h-full w-[240px] border-r bg-background/60 backdrop-blur p-3 hidden md:block">
-      <div className="flex items-center gap-2 px-2 pb-4">
+    <div className="h-full w-[360px] border-r bg-background/60 backdrop-blur p-[18px] hidden md:block">
+      <div className="flex items-center gap-2 px-3 pb-6">
         <Image 
           src="/salesMattertm (1).png" 
           alt="SalesMatter Logo" 
@@ -192,13 +328,14 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
           priority
         />
       </div>
-      <nav className="space-y-1">
+      <nav className="space-y-2">
         {items.map((it) => (
           <Button
             key={it.key}
             variant={current === it.key ? "secondary" : "ghost"}
+            size="lg"
             className={cx(
-              "w-full justify-start gap-2 rounded-xl",
+              "w-full justify-start gap-3 rounded-xl text-xl",
               current === it.key && "shadow"
             )}
             onClick={() => onChange(it.key)}
@@ -208,8 +345,8 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
           </Button>
         ))}
       </nav>
-      <Separator className="my-4" />
-      <div className="px-2 text-xs text-muted-foreground">
+      <Separator className="my-6" />
+      <div className="px-3 text-xs text-muted-foreground">
         v1.0 · Shadcn UI · Tailwind
       </div>
     </div>
@@ -318,8 +455,8 @@ function ImportScreen({
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
+    <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6">
         <CardHeader>
           <CardTitle>Upload CSV</CardTitle>
           <CardDescription>Import leads from spreadsheets. Column mapping is automatic with manual override.</CardDescription>
@@ -361,33 +498,9 @@ function ImportScreen({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>Connect CRM</CardTitle>
-          <CardDescription>Pull leads directly via API.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Label>Provider</Label>
-          <Select onValueChange={onConnectCRM}>
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Choose CRM" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl">
-              <SelectItem value="hubspot">HubSpot</SelectItem>
-              <SelectItem value="pipedrive">Pipedrive</SelectItem>
-              <SelectItem value="salesforce">Salesforce</SelectItem>
-              <SelectItem value="airtable">Airtable</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="secondary" className="w-full rounded-xl">
-            <ShieldCheck className="mr-2 h-4 w-4" /> OAuth Connect
-          </Button>
-          <Separator />
-          <div className="text-sm text-muted-foreground">Leads in workspace: {leads.length}</div>
-        </CardContent>
-      </Card>
+      {/* Removed: Connect CRM container as requested */}
 
-      <Card className="rounded-2xl lg:col-span-3">
+      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
         <CardHeader>
           <CardTitle>Lead Preview</CardTitle>
           <CardDescription>Recently imported leads.</CardDescription>
@@ -434,68 +547,142 @@ function ImportScreen({
 }
 
 function EnrichScreen({
-  enrichOptions,
-  setEnrichOptions,
-  onRunEnrichment,
+  leads,
+  onSetLinkedIn,
+  onBulkMarkEnriched,
 }: {
-  enrichOptions: EnrichOptions;
-  setEnrichOptions: (v: EnrichOptions) => void;
-  onRunEnrichment: () => void;
+  leads: Lead[];
+  onSetLinkedIn: (leadId: string, url: string) => void;
+  onBulkMarkEnriched: () => void;
 }) {
+  const googleQuery = (l: Lead) => {
+    let domain = "";
+    try {
+      if (l.website) {
+        domain = new URL(l.website).hostname.replace(/^www\./, "");
+      }
+    } catch {}
+    const q = `site:linkedin.com/in "${l.firstName} ${l.lastName}" ${l.company}${domain ? ` ${domain}` : ""}`;
+    return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  };
+  const linkedinPeopleQuery = (l: Lead) =>
+    `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+      `${l.firstName} ${l.lastName} ${l.company}`
+    )}`;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader>
-          <CardTitle>Enrichment Sources</CardTitle>
-          <CardDescription>Choose data sources to augment each lead.</CardDescription>
+          <CardTitle>LinkedIn Enrichment</CardTitle>
+          <CardDescription>
+            Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {([
-            { key: "linkedin", label: "LinkedIn Profiles" },
-            { key: "company", label: "Company Website" },
-            { key: "news", label: "Recent News" },
-            { key: "tech", label: "Tech Stack" },
-          ] as { key: keyof EnrichOptions; label: string }[]).map((o) => (
-            <div key={o.key} className="flex items-center justify-between rounded-xl border p-3">
-              <div>
-                <div className="font-medium">{o.label}</div>
-                <div className="text-xs text-muted-foreground">Enable to fetch {o.label.toLowerCase()}.</div>
-              </div>
-              <Switch
-                checked={enrichOptions[o.key]}
-                onCheckedChange={(v: boolean) => setEnrichOptions({ ...enrichOptions, [o.key]: v })}
-              />
-            </div>
-          ))}
+        <CardContent className="space-y-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Lead</TableHead>
+                <TableHead>Company</TableHead>
+                <TableHead>Website</TableHead>
+                <TableHead>Search</TableHead>
+                <TableHead>LinkedIn URL</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {leads.map((l) => (
+                <TableRow key={l.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback>
+                          {l.firstName[0]}
+                          {l.lastName[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <div className="font-medium">
+                          {l.firstName} {l.lastName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{l.title}</div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>{l.company}</TableCell>
+                  <TableCell className="max-w-[220px] truncate">
+                    {l.website ? (
+                      <a
+                        href={l.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary underline-offset-4 hover:underline"
+                      >
+                        {l.website}
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => window.open(googleQuery(l), "_blank")}
+                      >
+                        <Search className="mr-2 h-4 w-4" /> Google
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => window.open(linkedinPeopleQuery(l), "_blank")}
+                      >
+                        <Linkedin className="mr-2 h-4 w-4" /> LinkedIn
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="https://www.linkedin.com/in/..."
+                        defaultValue={l.linkedin || ""}
+                        onBlur={(e) => onSetLinkedIn(l.id, e.currentTarget.value)}
+                        className="rounded-xl w-[320px]"
+                      />
+                      <Badge variant="outline" className="rounded-xl capitalize">
+                        {l.status}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
         <CardFooter className="justify-between">
-          <div className="text-xs text-muted-foreground">API usage estimated: 0.02 credits/lead</div>
-          <Button className="rounded-xl" onClick={onRunEnrichment}>
-            <Database className="mr-2 h-4 w-4" /> Run Enrichment
+          <div className="text-xs text-muted-foreground">
+            Tip: Paste the exact profile URL (starts with https://www.linkedin.com/in/...). Leads with URLs can be bulk-marked as enriched.
+          </div>
+          <Button className="rounded-xl" onClick={onBulkMarkEnriched}>
+            <BadgeCheck className="mr-2 h-4 w-4" /> Mark all with URLs as Enriched
           </Button>
         </CardFooter>
       </Card>
 
       <Card className="rounded-2xl">
         <CardHeader>
-          <CardTitle>Keys & Providers</CardTitle>
-          <CardDescription>Store encrypted in workspace vault.</CardDescription>
+          <CardTitle>How matching works</CardTitle>
+          <CardDescription>Human-in-the-loop enrichment</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-2">
-            <Label>LinkedIn Cookie (li_at) / API</Label>
-            <Input placeholder="••••••••••" className="rounded-xl" />
-          </div>
-          <div className="grid gap-2">
-            <Label>News API Key</Label>
-            <Input placeholder="••••••••••" className="rounded-xl" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Tech Stack (BuiltWith) Key</Label>
-            <Input placeholder="••••••••••" className="rounded-xl" />
-          </div>
-          <Separator />
-          <div className="text-xs text-muted-foreground">Keys are masked and never exposed to clients.</div>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            We generate search links using the uploaded CSV fields: first name, last name, company name, and company URL. Use these to find the correct LinkedIn profile and paste the URL to attach it to the lead.
+          </p>
+          <p>
+            This demo does not call LinkedIn APIs. In production, integrate a compliant people search provider or your internal enrichment service.
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -523,33 +710,23 @@ function GenerateScreen({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiText, setAiText] = useState("");
+  // Inputs for the MambaOnline AI flow
+  const [companyName, setCompanyName] = useState("ClarinsMen");
+  const [customPrompt, setCustomPrompt] = useState("");
+  const [linkedinDescription, setLinkedinDescription] = useState("");
+  const [blogPosts, setBlogPosts] = useState("");
 
   const handleAIGenerate = async () => {
     setAiError(null);
     setAiText("");
     setAiLoading(true);
-    const prompt = `You are a skilled B2B SDR. Write a concise, high-converting, personalized cold outreach email.
-
-Lead details:
-- First name: ${lead?.firstName ?? ""}
-- Last name: ${lead?.lastName ?? ""}
-- Company: ${lead?.company ?? ""}
-- Title: ${lead?.title ?? ""}
-- Website: ${lead?.website ?? ""}
-
-Subject hint: ${subject}
-Body template (use as guidance; improve clarity and persuasion, avoid placeholders):
-${template}
-
-Output format exactly:
-Subject: <one compelling subject line>
-Body:
-<email body in 2-3 short paragraphs, <120 words, no signature>`;
+    // Compose "three information" content per the provided instructions
+    const prompt = `Receiver information:\nCompany Name: ${companyName}\nKnown lead context: ${lead?.firstName ?? ""} ${lead?.lastName ?? ""} at ${lead?.company ?? ""}\n\nFirstly (prompt):\n${customPrompt}\n\nSecondly (LinkedIn description):\n${linkedinDescription}\n\nThirdly (blog posts):\n${blogPosts}`;
     try {
       const res = await fetch("/api/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ prompt, system: SYSTEM_PROMPT }),
       });
       if (!res.ok || !res.body) throw new Error("Request failed");
       const reader = res.body.getReader();
@@ -598,12 +775,28 @@ Body:
         </CardFooter>
       </Card>
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>Live Preview</CardTitle>
-          <CardDescription>AI stream or token-filled preview</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <section className="lg:col-span-3 xl:col-span-4 space-y-3">
+        <div>
+          <div className="text-base font-semibold">Live Preview</div>
+          <div className="text-sm text-muted-foreground">AI stream or token-filled preview</div>
+        </div>
+        <div className="space-y-3">
+          <div className="grid gap-2">
+            <Label>Company Name</Label>
+            <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="rounded-xl" placeholder="ClarinsMen" />
+          </div>
+          <div className="grid gap-2">
+            <Label>Prompt</Label>
+            <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} className="min-h-24 rounded-2xl" placeholder="High-level goal, angle, or notes" />
+          </div>
+          <div className="grid gap-2">
+            <Label>LinkedIn Description</Label>
+            <Textarea value={linkedinDescription} onChange={(e) => setLinkedinDescription(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste the brand/recipient description from LinkedIn" />
+          </div>
+          <div className="grid gap-2">
+            <Label>Blog Posts</Label>
+            <Textarea value={blogPosts} onChange={(e) => setBlogPosts(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste 1–3 relevant blog post excerpts" />
+          </div>
           <div className="flex gap-2">
             <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
               {aiLoading ? (
@@ -626,8 +819,8 @@ Body:
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <pre className="whitespace-pre-wrap rounded-2xl border p-3 bg-muted/30">{aiText || preview || "(Preview will appear here)"}</pre>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1032,7 +1225,7 @@ export default function SalesAutomationUI() {
   const [section, setSection] = useState<string>("import");
   const [step, setStep] = useState<number>(0);
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
-  const [enrichOptions, setEnrichOptions] = useState({ linkedin: true, company: true, news: false, tech: false });
+  // LinkedIn enrichment flow replaces generic enrichment toggles
   const [template, setTemplate] = useState<string>(
     `Hi {{firstName}},\n\nI came across {{company}} and noticed your work in {{title}}. We help teams like yours automate outbound so you get more replies with fewer sends.\n\nWould you be open to a quick chat this week?\n\nBest,\nNeo\n`
   );
@@ -1059,15 +1252,26 @@ export default function SalesAutomationUI() {
       ...prev,
       { id, firstName: "Taylor", lastName: "Nkosi", company: "Example Pty", email: "taylor@example.com", title: "Ops Manager", website: "https://example.com", status: "new" },
     ]);
+    // Navigate to LinkedIn enrichment after import
+    setSection("enrich");
   };
 
   const onConnectCRM = (provider: string) => {
     console.log("Connect to:", provider);
   };
 
-  const runEnrichment = () => {
-    // Demo: mark all as enriched
-    setLeads((prev) => prev.map((l) => ({ ...l, status: "enriched" })));
+  const setLinkedInForLead = (leadId: string, url: string) => {
+    setLeads((prev) =>
+      prev.map((l) =>
+        l.id === leadId
+          ? { ...l, linkedin: url || undefined, status: url ? "enriched" : l.status }
+          : l
+      )
+    );
+  };
+
+  const bulkMarkEnriched = () => {
+    setLeads((prev) => prev.map((l) => (l.linkedin ? { ...l, status: "enriched" } : l)));
   };
 
   const runGeneration = () => {
@@ -1139,7 +1343,7 @@ export default function SalesAutomationUI() {
         <Sidebar current={section} onChange={setSection} />
         <div className="flex-1">
           <Topbar />
-          <main className="mx-auto max-w-[1200px] px-4 py-6 space-y-4">
+          <main className="mx-auto max-w-[1440px] xl:max-w-[1600px] px-4 py-6 space-y-4">
             <div className="flex items-center justify-between gap-2">
               <Stepper step={step} onStep={setStep} />
               <div className="hidden sm:flex items-center gap-2">
@@ -1157,7 +1361,7 @@ export default function SalesAutomationUI() {
             )}
 
             {section === "enrich" && (
-              <EnrichScreen enrichOptions={enrichOptions} setEnrichOptions={setEnrichOptions} onRunEnrichment={runEnrichment} />
+              <EnrichScreen leads={leads} onSetLinkedIn={setLinkedInForLead} onBulkMarkEnriched={bulkMarkEnriched} />
             )}
 
             {section === "generate" && (
@@ -1203,7 +1407,7 @@ export default function SalesAutomationUI() {
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground grid gap-2">
                 <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
-                <div className="flex items-center gap-2"><Database className="h-4 w-4" /> Enrichment toggles & provider keys</div>
+                <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
                 <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
                 <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
                 <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
