@@ -455,7 +455,7 @@ function Sidebar({
   ];
 
   return (
-    <div className="h-full w-[360px] border-r bg-background/60 backdrop-blur p-[18px] hidden md:block">
+    <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
       <div className="flex items-center gap-2 px-3 pb-6">
         <Image 
           src="/salesMattertm (1).png" 
@@ -619,7 +619,7 @@ function Topbar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const isDark = (resolvedTheme ?? theme) === "dark";
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-background/70 backdrop-blur px-4 py-2">
+    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
       <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -817,7 +817,7 @@ function ImportScreen({
           <ScrollArea className="h-[420px]">
             <Table>
               <TableHeader>
-                <TableRow className="sticky top-0 bg-background z-10">
+                <TableRow className="sticky top-0 bg-muted/50 z-10">
                   <TableHead>Lead</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
@@ -1551,7 +1551,7 @@ function SettingsScreen() {
         </CardHeader>
         <CardContent className="space-y-3">
           {["Neo Sekaleli", "Onalerona Maine", "Khutso Moleleki", "Motheo Modisaesi", "Thato Seekoei"].map((name, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border p-2">
+            <div key={i} className="flex items-center justify-between rounded-xl border p-2 bg-muted/20">
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8"><AvatarFallback>{name.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
                 <div>
