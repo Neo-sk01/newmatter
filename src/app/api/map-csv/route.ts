@@ -14,21 +14,39 @@ const LeadSchema = z.object({
   linkedin: z.string().optional().nullable(),
 });
 
+// Allowed canonical targets for header mapping
+const CanonicalField = z.enum([
+  "firstName",
+  "lastName",
+  "company",
+  "email",
+  "title",
+  "website",
+  "linkedin",
+  "ignore",
+]);
+
+// Primary expected shape: original column name -> canonical field
+const HeaderMappingForward = z.record(z.string(), CanonicalField);
+
+// Common LLM alternative: canonical field -> original column name(s)
+const HeaderMappingReverse = z.record(
+  CanonicalField,
+  z.union([z.string(), z.array(z.string())])
+);
+
+// Another alternative some models produce: list of pairs
+const HeaderMappingPairs = z.array(
+  z.object({ column: z.string(), mapTo: CanonicalField })
+);
+
 const ResponseSchema = z.object({
   // Map from original CSV header name to a canonical field or "ignore".
-  headerMapping: z.record(
-    z.string(),
-    z.union([
-      z.literal("firstName"),
-      z.literal("lastName"),
-      z.literal("company"),
-      z.literal("email"),
-      z.literal("title"),
-      z.literal("website"),
-      z.literal("linkedin"),
-      z.literal("ignore"),
-    ])
-  ),
+  headerMapping: z.union([
+    HeaderMappingForward,
+    HeaderMappingReverse,
+    HeaderMappingPairs,
+  ]),
   // Optional rule for splitting a full name column into first/last
   rules: z
     .object({
@@ -90,7 +108,49 @@ Guidelines:
       maxOutputTokens: 800,
     });
 
-    return Response.json(object);
+    // Normalize headerMapping to: original header -> canonical string
+    const normalize = (
+      mapping: unknown,
+      cols: string[]
+    ): Record<string, z.infer<typeof CanonicalField>> => {
+      const out: Record<string, z.infer<typeof CanonicalField>> = {};
+      const setIfCol = (col: string, target: z.infer<typeof CanonicalField>) => {
+        if (!col) return;
+        // Only keep mappings for known columns
+        if (cols.includes(col)) out[col] = target;
+      };
+
+      // Forward shape
+      if (HeaderMappingForward.safeParse(mapping).success) {
+        const m = mapping as z.infer<typeof HeaderMappingForward>;
+        for (const [col, target] of Object.entries(m)) setIfCol(col, target);
+        return out;
+      }
+      // Reverse shape
+      if (HeaderMappingReverse.safeParse(mapping).success) {
+        const m = mapping as z.infer<typeof HeaderMappingReverse>;
+        for (const [target, colsOrList] of Object.entries(m)) {
+          const list = Array.isArray(colsOrList) ? colsOrList : [colsOrList as string];
+          for (const col of list) setIfCol(col, target as z.infer<typeof CanonicalField>);
+        }
+        return out;
+      }
+      // Pairs shape
+      if (HeaderMappingPairs.safeParse(mapping).success) {
+        const m = mapping as z.infer<typeof HeaderMappingPairs>;
+        for (const { column, mapTo } of m) setIfCol(column, mapTo);
+        return out;
+      }
+      // Fallback: empty mapping
+      return out;
+    };
+
+    const normalized = {
+      ...object,
+      headerMapping: normalize((object as any)?.headerMapping, columns),
+    };
+
+    return Response.json(normalized);
   } catch (err) {
     console.error("/api/map-csv error", err);
     return new Response("Failed to map CSV", { status: 500 });

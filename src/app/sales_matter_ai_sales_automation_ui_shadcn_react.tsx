@@ -48,6 +48,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
+import FooterSection from "@/components/footer-section";
 import { format } from "date-fns";
 import {
   AlignLeft,
@@ -729,14 +730,17 @@ function EnrichScreen({
     )}`;
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>LinkedIn Enrichment</CardTitle>
-          <CardDescription>
-            Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
-          </CardDescription>
+      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>LinkedIn Enrichment</CardTitle>
+            <CardDescription>
+              Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+            </CardDescription>
+          </div>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -904,12 +908,15 @@ function GenerateScreen({
   };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Prompt Template</CardTitle>
-          <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
+      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>Prompt Template</CardTitle>
+            <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
+          </div>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Subject</Label>
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="rounded-xl" placeholder="Quick idea for {{company}}" />
@@ -1135,12 +1142,13 @@ function SendScreen({
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
+      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
           <CardTitle>Batch Sending</CardTitle>
           <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="overflow-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>Batch size</Label>
@@ -1213,12 +1221,13 @@ function SendScreen({
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl">
-        <CardHeader>
+      <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
           <CardTitle>Compliance</CardTitle>
           <CardDescription>Deliverability & opt-out</CardDescription>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="overflow-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="font-medium">Include unsubscribe link</div>
@@ -1244,12 +1253,15 @@ function SendScreen({
 function AnalyticsScreen() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Campaign Performance</CardTitle>
-          <CardDescription>Daily sending vs opens & replies</CardDescription>
+      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>Campaign Performance</CardTitle>
+            <CardDescription>Daily sending vs opens & replies</CardDescription>
+          </div>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="h-[300px]">
+        <CardContent className="h-[300px] overflow-auto">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ left: 8, right: 8 }}>
               <defs>
@@ -1306,12 +1318,15 @@ function AnalyticsScreen() {
 function SettingsScreen() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>SMTP & Provider</CardTitle>
-          <CardDescription>Credentials are stored securely.</CardDescription>
+      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>SMTP & Provider</CardTitle>
+            <CardDescription>Credentials are stored securely.</CardDescription>
+          </div>
+          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Provider</Label>
             <Select defaultValue="sendgrid">
@@ -1642,6 +1657,7 @@ export default function SalesAutomationUI() {
           </main>
         </div>
       </div>
+      <FooterSection />
     </div>
   );
 }
