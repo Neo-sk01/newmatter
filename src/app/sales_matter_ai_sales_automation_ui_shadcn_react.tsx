@@ -80,6 +80,7 @@ import {
   Sun,
   Moon,
   Linkedin,
+  Trash2,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -557,10 +558,14 @@ function ImportScreen({
   leads,
   onImportCSV,
   onConnectCRM,
+  onRemoveLead,
+  onClearLeads,
 }: {
   leads: Lead[];
   onImportCSV: (file: File) => void;
   onConnectCRM: (provider: string) => void;
+  onRemoveLead: (id: string) => void;
+  onClearLeads: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -633,51 +638,52 @@ function ImportScreen({
               <Upload className="mr-2 h-4 w-4" /> Import
             </Button>
           </div>
-          <Separator />
-          <div>
-            <div className="text-sm font-medium mb-2">Detected Columns</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {["firstName", "lastName", "email", "company", "title", "website", "linkedin"].map((field) => (
-                <div key={field} className="flex items-center justify-between rounded-xl border p-2">
-                  <div className="text-sm">{field}</div>
-                  <Select>
-                    <SelectTrigger className="w-[140px] rounded-xl">
-                      <SelectValue placeholder="Map to" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="ignore">Ignore</SelectItem>
-                      <SelectItem value="custom">Custom…</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Detected Columns section removed as requested */}
         </CardContent>
       </Card>
 
       {/* Removed: Connect CRM container as requested */}
 
       <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
-        <CardHeader>
-          <CardTitle>Lead Preview</CardTitle>
-          <CardDescription>Recently imported leads.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div>
+            <CardTitle>Lead Preview</CardTitle>
+            <CardDescription>Recently imported leads ({leads.length}).</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              className="rounded-xl"
+              onClick={onClearLeads}
+              disabled={leads.length === 0}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Clear list
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[240px]">
+          <ScrollArea className="h-[420px]">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="sticky top-0 bg-background z-10">
                   <TableHead>Lead</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {leads.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                      No leads imported yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {leads.map((l) => (
-                  <TableRow key={l.id}>
+                  <TableRow key={l.id} className="odd:bg-muted/30">
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
@@ -693,6 +699,16 @@ function ImportScreen({
                     <TableCell>{l.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="rounded-xl capitalize">{l.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => onRemoveLead(l.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Remove
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1555,6 +1571,20 @@ export default function SalesAutomationUI() {
 
   const approvedCount = leads.filter((l) => l.status === "approved").length;
 
+  // Lead removal helpers for ImportScreen
+  const removeLead = (leadId: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    // Also remove any generated email entry tied to that lead
+    setEmails((prev) => {
+      const { [leadId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+  const clearLeads = () => {
+    setLeads([]);
+    setEmails({});
+  };
+
   // Simulate sending with batches
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -1615,7 +1645,13 @@ export default function SalesAutomationUI() {
             </div>
 
             {section === "import" && (
-              <ImportScreen leads={leads} onImportCSV={onImportCSV} onConnectCRM={onConnectCRM} />
+              <ImportScreen
+                leads={leads}
+                onImportCSV={onImportCSV}
+                onConnectCRM={onConnectCRM}
+                onRemoveLead={removeLead}
+                onClearLeads={clearLeads}
+              />
             )}
 
             {section === "enrich" && (
