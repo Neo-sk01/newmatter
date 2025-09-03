@@ -81,6 +81,9 @@ import {
   Moon,
   Linkedin,
   Trash2,
+  FolderPlus,
+  Folder,
+  X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -113,6 +116,12 @@ interface GeneratedEmail {
   leadId: string;
   subject: string;
   body: string;
+}
+
+interface LeadList {
+  id: string;
+  name: string;
+  leads: Lead[];
 }
 
 type EnrichOptions = {
@@ -416,7 +425,25 @@ function guessHeaderMapping(columns: string[]): Record<string, string> {
 // Subcomponents
 // ----------------------------------------------
 
-function Sidebar({ current, onChange }: { current: string; onChange: (v: string) => void }) {
+function Sidebar({
+  current,
+  onChange,
+  lists,
+  currentListId,
+  onSelectList,
+  onNewList,
+  onRemoveList,
+  onRenameList,
+}: {
+  current: string;
+  onChange: (v: string) => void;
+  lists: LeadList[];
+  currentListId: string;
+  onSelectList: (id: string) => void;
+  onNewList: () => void;
+  onRemoveList: (id: string) => void;
+  onRenameList: (id: string, name: string) => void;
+}) {
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
@@ -457,9 +484,133 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
         ))}
       </nav>
       <Separator className="my-6" />
+      <div className="px-3 flex items-center justify-between mb-2">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lead Lists</div>
+        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onNewList}>
+          <FolderPlus className="mr-2 h-4 w-4" /> New
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {lists.map((list) => (
+          <SidebarListRow
+            key={list.id}
+            list={list}
+            active={currentListId === list.id}
+            onSelect={() => onSelectList(list.id)}
+            onRemove={() => onRemoveList(list.id)}
+            onRename={(name) => onRenameList(list.id, name)}
+          />
+        ))}
+        {lists.length === 0 && (
+          <div className="px-3 text-xs text-muted-foreground">No lists. Create one to get started.</div>
+        )}
+      </div>
+      <Separator className="my-6" />
       <div className="px-3 text-xs text-muted-foreground">
         v1.0 · Shadcn UI · Tailwind
       </div>
+    </div>
+  );
+}
+
+function SidebarListRow({
+  list,
+  active,
+  onSelect,
+  onRemove,
+  onRename,
+}: {
+  list: LeadList;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(list.name);
+
+  const commit = () => {
+    const next = name.trim();
+    if (next && next !== list.name) onRename(next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setName(list.name);
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-1">
+      {!editing ? (
+        <>
+          <Button
+            variant={active ? "secondary" : "ghost"}
+            size="lg"
+            className={cx(
+              "flex-1 justify-start gap-3 rounded-xl text-base min-w-0",
+              active && "shadow"
+            )}
+            onClick={onSelect}
+          >
+            <Folder className="h-6 w-6 flex-shrink-0" />
+            <span className="truncate">{list.name}</span>
+          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Rename list"
+              onClick={() => setEditing(true)}
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Delete list"
+              onClick={onRemove}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 flex-1">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") cancel();
+            }}
+            className="rounded-xl flex-1"
+            autoFocus
+          />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Save name"
+              onClick={commit}
+            >
+              <Check className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Cancel rename"
+              onClick={cancel}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -645,7 +796,7 @@ function ImportScreen({
       {/* Removed: Connect CRM container as requested */}
 
       <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
-        <CardHeader className="flex flex-row items-start justify-between">
+        <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Lead Preview</CardTitle>
             <CardDescription>Recently imported leads ({leads.length}).</CardDescription>
@@ -749,7 +900,7 @@ function EnrichScreen({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {showLinkedInCard && (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>LinkedIn Enrichment</CardTitle>
               <CardDescription>
@@ -930,7 +1081,7 @@ function GenerateScreen({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {showTemplateCard && (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Prompt Template</CardTitle>
               <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
@@ -1168,7 +1319,7 @@ function SendScreen({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {showBatchCard && (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Batch Sending</CardTitle>
             <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
             <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowBatchCard(false)}>Delete</Button>
@@ -1249,7 +1400,7 @@ function SendScreen({
 
       {showComplianceCard && (
         <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Compliance</CardTitle>
             <CardDescription>Deliverability & opt-out</CardDescription>
             <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowComplianceCard(false)}>Delete</Button>
@@ -1284,7 +1435,7 @@ function AnalyticsScreen() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {showPerformanceCard && (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Campaign Performance</CardTitle>
               <CardDescription>Daily sending vs opens & replies</CardDescription>
@@ -1431,6 +1582,13 @@ function SettingsScreen() {
 export default function SalesAutomationUI() {
   const [section, setSection] = useState<string>("import");
   const [step, setStep] = useState<number>(0);
+  // Lead lists (folders) and active list selection
+  const defaultListId = "default";
+  const [leadLists, setLeadLists] = useState<LeadList[]>([
+    { id: defaultListId, name: "Sample Leads", leads: initialLeads },
+  ]);
+  const [currentListId, setCurrentListId] = useState<string>(defaultListId);
+  // Local working set mirrors the active list
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   // LinkedIn enrichment flow replaces generic enrichment toggles
   const [template, setTemplate] = useState<string>(
@@ -1523,7 +1681,13 @@ export default function SalesAutomationUI() {
         return;
       }
 
-      setLeads((prev) => [...prev, ...mapped]);
+      // Create a new lead list (folder) for each uploaded file
+      const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
+      const newId = `${Date.now()}`;
+      const newList: LeadList = { id: newId, name: base, leads: mapped };
+      setLeadLists((prev) => [...prev, newList]);
+      setCurrentListId(newId);
+      setLeads(mapped);
       setSection("enrich");
     } catch (err) {
       console.error("Import failed", err);
@@ -1570,6 +1734,51 @@ export default function SalesAutomationUI() {
   };
 
   const approvedCount = leads.filter((l) => l.status === "approved").length;
+
+  // Keep the current list in sync with local leads state
+  useEffect(() => {
+    setLeadLists((prev) => {
+      let changed = false;
+      const next = prev.map((lst) => {
+        if (lst.id !== currentListId) return lst;
+        if (lst.leads === leads) return lst;
+        changed = true;
+        return { ...lst, leads };
+      });
+      return changed ? next : prev;
+    });
+  }, [leads, currentListId]);
+
+  // When switching lists, load its leads into local state
+  // Only react to list ID changes to avoid sync loops with the writer effect above.
+  useEffect(() => {
+    const selected = leadLists.find((l) => l.id === currentListId);
+    if (selected) {
+      setLeads(selected.leads);
+    }
+  }, [currentListId]);
+
+  // Sidebar list actions
+  const newEmptyList = () => {
+    const newId = `${Date.now()}`;
+    const list: LeadList = { id: newId, name: `List ${leadLists.length + 1}`, leads: [] };
+    setLeadLists((prev) => [...prev, list]);
+    setCurrentListId(newId);
+    setLeads([]);
+  };
+  const selectList = (id: string) => setCurrentListId(id);
+  const removeListById = (id: string) => {
+    setLeadLists((prev) => {
+      const filtered = prev.filter((l) => l.id !== id);
+      if (id === currentListId) {
+        const nextId = filtered[0]?.id || "";
+        setCurrentListId(nextId);
+        const nextLeads = filtered.find((l) => l.id === nextId)?.leads || [];
+        setLeads(nextLeads);
+      }
+      return filtered;
+    });
+  };
 
   // Lead removal helpers for ImportScreen
   const removeLead = (leadId: string) => {
@@ -1628,7 +1837,18 @@ export default function SalesAutomationUI() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <div className="flex">
-        <Sidebar current={section} onChange={setSection} />
+        <Sidebar
+          current={section}
+          onChange={setSection}
+          lists={leadLists}
+          currentListId={currentListId}
+          onSelectList={selectList}
+          onNewList={newEmptyList}
+          onRemoveList={removeListById}
+          onRenameList={(id, name) =>
+            setLeadLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)))
+          }
+        />
         <div className="flex-1">
           <Topbar />
           <main className="mx-auto max-w-[1440px] xl:max-w-[1600px] px-4 py-6 space-y-4">
