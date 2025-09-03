@@ -728,19 +728,21 @@ function EnrichScreen({
     `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
       `${l.firstName} ${l.lastName} ${l.company}`
     )}`;
+  const [showLinkedInCard, setShowLinkedInCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle>LinkedIn Enrichment</CardTitle>
-            <CardDescription>
-              Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
-            </CardDescription>
-          </div>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="space-y-4 overflow-auto">
+      {showLinkedInCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>LinkedIn Enrichment</CardTitle>
+              <CardDescription>
+                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+              </CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowLinkedInCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -822,16 +824,17 @@ function EnrichScreen({
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-        <CardFooter className="justify-between">
+          </CardContent>
+          <CardFooter className="justify-between">
           <div className="text-xs text-muted-foreground">
             Tip: Paste the exact profile URL (starts with https://www.linkedin.com/in/...). Leads with URLs can be bulk-marked as enriched.
           </div>
           <Button className="rounded-xl" onClick={onBulkMarkEnriched}>
             <BadgeCheck className="mr-2 h-4 w-4" /> Mark all with URLs as Enriched
           </Button>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -877,6 +880,7 @@ function GenerateScreen({
   const [customPrompt, setCustomPrompt] = useState("");
   const [linkedinDescription, setLinkedinDescription] = useState("");
   const [blogPosts, setBlogPosts] = useState("");
+  const [showTemplateCard, setShowTemplateCard] = useState(true);
 
   const handleAIGenerate = async () => {
     setAiError(null);
@@ -908,15 +912,16 @@ function GenerateScreen({
   };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle>Prompt Template</CardTitle>
-            <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
-          </div>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="space-y-4 overflow-auto">
+      {showTemplateCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Prompt Template</CardTitle>
+              <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowTemplateCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Subject</Label>
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="rounded-xl" placeholder="Quick idea for {{company}}" />
@@ -931,14 +936,15 @@ function GenerateScreen({
               ))}
             </div>
           </div>
-        </CardContent>
-        <CardFooter className="justify-between">
+          </CardContent>
+          <CardFooter className="justify-between">
           <div className="text-xs text-muted-foreground">Model: GPT-4 class · Avg ~180 tokens / email</div>
           <Button onClick={onGenerate} className="rounded-xl">
             <BrainCircuit className="mr-2 h-4 w-4" /> Generate for all leads
           </Button>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      )}
 
       <section className="lg:col-span-3 xl:col-span-4 space-y-3">
         <div>
@@ -1140,15 +1146,18 @@ function SendScreen({
   schedule: Date | null;
   setSchedule: (d: Date | null) => void;
 }) {
+  const [showBatchCard, setShowBatchCard] = useState(true);
+  const [showComplianceCard, setShowComplianceCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <CardTitle>Batch Sending</CardTitle>
-          <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="overflow-auto">
+      {showBatchCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <CardTitle>Batch Sending</CardTitle>
+            <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowBatchCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>Batch size</Label>
@@ -1218,16 +1227,18 @@ function SendScreen({
             <Label>Progress</Label>
             <Progress value={progress} className="h-2" />
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <CardTitle>Compliance</CardTitle>
-          <CardDescription>Deliverability & opt-out</CardDescription>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="overflow-auto space-y-3">
+      {showComplianceCard && (
+        <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <CardTitle>Compliance</CardTitle>
+            <CardDescription>Deliverability & opt-out</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowComplianceCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="font-medium">Include unsubscribe link</div>
@@ -1244,24 +1255,27 @@ function SendScreen({
             <Input placeholder="mailer.salesmatter.co" className="rounded-xl" />
             <div className="text-xs text-muted-foreground">Remember to set up SPF, DKIM, DMARC.</div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
 function AnalyticsScreen() {
+  const [showPerformanceCard, setShowPerformanceCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle>Campaign Performance</CardTitle>
-            <CardDescription>Daily sending vs opens & replies</CardDescription>
-          </div>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="h-[300px] overflow-auto">
+      {showPerformanceCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>Campaign Performance</CardTitle>
+              <CardDescription>Daily sending vs opens & replies</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowPerformanceCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="h-[300px] overflow-auto">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ left: 8, right: 8 }}>
               <defs>
@@ -1279,8 +1293,9 @@ function AnalyticsScreen() {
               <Area type="monotone" dataKey="replied" stroke="currentColor" fillOpacity={0.05} />
             </AreaChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -1316,17 +1331,19 @@ function AnalyticsScreen() {
 }
 
 function SettingsScreen() {
+  const [showSmtpCard, setShowSmtpCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-        <CardHeader className="flex flex-row items-start justify-between">
-          <div>
-            <CardTitle>SMTP & Provider</CardTitle>
-            <CardDescription>Credentials are stored securely.</CardDescription>
-          </div>
-          <Button variant="destructive" size="sm" className="rounded-xl">Delete</Button>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
+      {showSmtpCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>SMTP & Provider</CardTitle>
+              <CardDescription>Credentials are stored securely.</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowSmtpCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Provider</Label>
             <Select defaultValue="sendgrid">
@@ -1356,8 +1373,9 @@ function SettingsScreen() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
