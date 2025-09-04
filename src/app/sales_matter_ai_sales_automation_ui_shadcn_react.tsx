@@ -1,5 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
+import Papa from "papaparse";
 import Image from "next/image";
 import {
   Card,
@@ -47,6 +48,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
+import FooterSection from "@/components/footer-section";
 import { format } from "date-fns";
 import {
   AlignLeft,
@@ -78,6 +80,10 @@ import {
   Sun,
   Moon,
   Linkedin,
+  Trash2,
+  FolderPlus,
+  Folder,
+  X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -110,6 +116,12 @@ interface GeneratedEmail {
   leadId: string;
   subject: string;
   body: string;
+}
+
+interface LeadList {
+  id: string;
+  name: string;
+  leads: Lead[];
 }
 
 type EnrichOptions = {
@@ -295,11 +307,137 @@ const tokenFill = (template: string, lead: Lead) =>
 
 const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
 
+// Apply LLM-provided mapping rules to a CSV row
+function applyMapping(
+  row: Record<string, any>,
+  headerMapping: Record<string, string>,
+  rules?: { splitFullName?: { column: string; firstNameFirst?: boolean } }
+) {
+  const out: {
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    email?: string;
+    title?: string | null;
+    website?: string | null;
+    linkedin?: string | null;
+  } = {};
+
+  const get = (k: string) => {
+    const v = row[k];
+    if (v == null) return "";
+    return String(v).trim();
+  };
+
+  const normalizeUrl = (v: string) => {
+    if (!v) return "";
+    let s = v.trim();
+    if (!/^https?:\/\//i.test(s)) {
+      s = s.startsWith("www.") ? `https://${s}` : `https://${s}`;
+    }
+    return s;
+  };
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  for (const [col, field] of Object.entries(headerMapping || {})) {
+    if (!field || field === "ignore") continue;
+    const value = get(col);
+    if (!value) continue;
+    switch (field) {
+      case "firstName":
+        out.firstName = value;
+        break;
+      case "lastName":
+        out.lastName = value;
+        break;
+      case "company":
+        out.company = value;
+        break;
+      case "email":
+        if (emailRe.test(value.toLowerCase())) out.email = value.toLowerCase();
+        break;
+      case "title":
+        out.title = value;
+        break;
+      case "website":
+        out.website = normalizeUrl(value);
+        break;
+      case "linkedin":
+        out.linkedin = normalizeUrl(value);
+        break;
+    }
+  }
+
+  if ((!out.firstName || !out.lastName) && rules?.splitFullName?.column) {
+    const full = get(rules.splitFullName.column);
+    if (full) {
+      const parts = full.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) {
+        out.firstName ??= parts[0];
+      } else if (parts.length >= 2) {
+        const firstIdx = rules.splitFullName.firstNameFirst === false ? parts.length - 1 : 0;
+        const lastIdx = rules.splitFullName.firstNameFirst === false ? 0 : parts.length - 1;
+        out.firstName ??= parts[firstIdx];
+        out.lastName ??= parts.slice(lastIdx).join(" ");
+      }
+    }
+  }
+
+  return out;
+}
+
+// Heuristic fallback if LLM mapping is unavailable
+function guessHeaderMapping(columns: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const candidates: Record<string, string[]> = {
+    firstName: ["firstname", "first", "givenname", "fname"],
+    lastName: ["lastname", "last", "surname", "lname"],
+    company: ["company", "organisation", "organization", "org", "employer"],
+    email: ["email", "e-mail", "mail"],
+    title: ["title", "role", "position", "jobtitle"],
+    website: ["website", "site", "url", "domain"],
+    linkedin: ["linkedin", "linkedinurl", "linkedinprofile", "li"],
+  };
+  for (const col of columns) {
+    const n = norm(col);
+    let matched = false;
+    for (const [field, syns] of Object.entries(candidates)) {
+      if (syns.some((s) => n.includes(s))) {
+        map[col] = field;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) map[col] = "ignore";
+  }
+  return map;
+}
+
 // ----------------------------------------------
 // Subcomponents
 // ----------------------------------------------
 
-function Sidebar({ current, onChange }: { current: string; onChange: (v: string) => void }) {
+function Sidebar({
+  current,
+  onChange,
+  lists,
+  currentListId,
+  onSelectList,
+  onNewList,
+  onRemoveList,
+  onRenameList,
+}: {
+  current: string;
+  onChange: (v: string) => void;
+  lists: LeadList[];
+  currentListId: string;
+  onSelectList: (id: string) => void;
+  onNewList: () => void;
+  onRemoveList: (id: string) => void;
+  onRenameList: (id: string, name: string) => void;
+}) {
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
@@ -311,7 +449,7 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
   ];
 
   return (
-    <div className="h-full w-[360px] border-r bg-background/60 backdrop-blur p-[18px] hidden md:block">
+    <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
       <div className="flex items-center gap-2 px-3 pb-6">
         <Image 
           src="/salesMattertm (1).png" 
@@ -340,9 +478,133 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
         ))}
       </nav>
       <Separator className="my-6" />
+      <div className="px-3 flex items-center justify-between mb-2">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lead Lists</div>
+        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onNewList}>
+          <FolderPlus className="mr-2 h-4 w-4" /> New
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {lists.map((list) => (
+          <SidebarListRow
+            key={list.id}
+            list={list}
+            active={currentListId === list.id}
+            onSelect={() => onSelectList(list.id)}
+            onRemove={() => onRemoveList(list.id)}
+            onRename={(name) => onRenameList(list.id, name)}
+          />
+        ))}
+        {lists.length === 0 && (
+          <div className="px-3 text-xs text-muted-foreground">No lists. Create one to get started.</div>
+        )}
+      </div>
+      <Separator className="my-6" />
       <div className="px-3 text-xs text-muted-foreground">
         v1.0 · Shadcn UI · Tailwind
       </div>
+    </div>
+  );
+}
+
+function SidebarListRow({
+  list,
+  active,
+  onSelect,
+  onRemove,
+  onRename,
+}: {
+  list: LeadList;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(list.name);
+
+  const commit = () => {
+    const next = name.trim();
+    if (next && next !== list.name) onRename(next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setName(list.name);
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-1">
+      {!editing ? (
+        <>
+          <Button
+            variant={active ? "secondary" : "ghost"}
+            size="lg"
+            className={cx(
+              "flex-1 justify-start gap-3 rounded-xl text-base min-w-0",
+              active && "shadow"
+            )}
+            onClick={onSelect}
+          >
+            <Folder className="h-6 w-6 flex-shrink-0" />
+            <span className="truncate">{list.name}</span>
+          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Rename list"
+              onClick={() => setEditing(true)}
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Delete list"
+              onClick={onRemove}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 flex-1">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") cancel();
+            }}
+            className="rounded-xl flex-1"
+            autoFocus
+          />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Save name"
+              onClick={commit}
+            >
+              <Check className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Cancel rename"
+              onClick={cancel}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -351,7 +613,7 @@ function Topbar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const isDark = (resolvedTheme ?? theme) === "dark";
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-background/70 backdrop-blur px-4 py-2">
+    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
       <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -441,10 +703,14 @@ function ImportScreen({
   leads,
   onImportCSV,
   onConnectCRM,
+  onRemoveLead,
+  onClearLeads,
 }: {
   leads: Lead[];
   onImportCSV: (file: File) => void;
   onConnectCRM: (provider: string) => void;
+  onRemoveLead: (id: string) => void;
+  onClearLeads: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -497,7 +763,16 @@ function ImportScreen({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Input ref={fileRef} type="file" accept=".csv" className="rounded-xl" />
+            <Input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              className="rounded-xl"
+              onChange={(e) => {
+                const f = e.currentTarget.files?.[0];
+                if (f) onImportCSV(f);
+              }}
+            />
             <Button
               className="rounded-xl"
               onClick={() => {
@@ -508,51 +783,52 @@ function ImportScreen({
               <Upload className="mr-2 h-4 w-4" /> Import
             </Button>
           </div>
-          <Separator />
-          <div>
-            <div className="text-sm font-medium mb-2">Detected Columns</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {["firstName", "lastName", "email", "company", "title", "website", "linkedin"].map((field) => (
-                <div key={field} className="flex items-center justify-between rounded-xl border p-2">
-                  <div className="text-sm">{field}</div>
-                  <Select>
-                    <SelectTrigger className="w-[140px] rounded-xl">
-                      <SelectValue placeholder="Map to" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="ignore">Ignore</SelectItem>
-                      <SelectItem value="custom">Custom…</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Detected Columns section removed as requested */}
         </CardContent>
       </Card>
 
       {/* Removed: Connect CRM container as requested */}
 
       <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
-        <CardHeader>
-          <CardTitle>Lead Preview</CardTitle>
-          <CardDescription>Recently imported leads.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Lead Preview</CardTitle>
+            <CardDescription>Recently imported leads ({leads.length}).</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              className="rounded-xl"
+              onClick={onClearLeads}
+              disabled={leads.length === 0}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Clear list
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[240px]">
+          <ScrollArea className="h-[420px]">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="sticky top-0 bg-muted/50 z-10">
                   <TableHead>Lead</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {leads.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                      No leads imported yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {leads.map((l) => (
-                  <TableRow key={l.id}>
+                  <TableRow key={l.id} className="odd:bg-muted/30">
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
@@ -568,6 +844,16 @@ function ImportScreen({
                     <TableCell>{l.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="rounded-xl capitalize">{l.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => onRemoveLead(l.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Remove
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -603,16 +889,21 @@ function EnrichScreen({
     `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
       `${l.firstName} ${l.lastName} ${l.company}`
     )}`;
+  const [showLinkedInCard, setShowLinkedInCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>LinkedIn Enrichment</CardTitle>
-          <CardDescription>
-            Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {showLinkedInCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>LinkedIn Enrichment</CardTitle>
+              <CardDescription>
+                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+              </CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowLinkedInCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -694,16 +985,17 @@ function EnrichScreen({
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-        <CardFooter className="justify-between">
+          </CardContent>
+          <CardFooter className="justify-between">
           <div className="text-xs text-muted-foreground">
             Tip: Paste the exact profile URL (starts with https://www.linkedin.com/in/...). Leads with URLs can be bulk-marked as enriched.
           </div>
           <Button className="rounded-xl" onClick={onBulkMarkEnriched}>
             <BadgeCheck className="mr-2 h-4 w-4" /> Mark all with URLs as Enriched
           </Button>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -749,6 +1041,7 @@ function GenerateScreen({
   const [customPrompt, setCustomPrompt] = useState("");
   const [linkedinDescription, setLinkedinDescription] = useState("");
   const [blogPosts, setBlogPosts] = useState("");
+  const [showTemplateCard, setShowTemplateCard] = useState(true);
 
   const handleAIGenerate = async () => {
     setAiError(null);
@@ -780,12 +1073,16 @@ function GenerateScreen({
   };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Prompt Template</CardTitle>
-          <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {showTemplateCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Prompt Template</CardTitle>
+              <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowTemplateCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Subject</Label>
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="rounded-xl" placeholder="Quick idea for {{company}}" />
@@ -800,14 +1097,15 @@ function GenerateScreen({
               ))}
             </div>
           </div>
-        </CardContent>
-        <CardFooter className="justify-between">
+          </CardContent>
+          <CardFooter className="justify-between">
           <div className="text-xs text-muted-foreground">Model: GPT-4 class · Avg ~180 tokens / email</div>
           <Button onClick={onGenerate} className="rounded-xl">
             <BrainCircuit className="mr-2 h-4 w-4" /> Generate for all leads
           </Button>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      )}
 
       <section className="lg:col-span-3 xl:col-span-4 space-y-3">
         <div>
@@ -1009,14 +1307,18 @@ function SendScreen({
   schedule: Date | null;
   setSchedule: (d: Date | null) => void;
 }) {
+  const [showBatchCard, setShowBatchCard] = useState(true);
+  const [showComplianceCard, setShowComplianceCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Batch Sending</CardTitle>
-          <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {showBatchCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Batch Sending</CardTitle>
+            <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowBatchCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>Batch size</Label>
@@ -1086,15 +1388,18 @@ function SendScreen({
             <Label>Progress</Label>
             <Progress value={progress} className="h-2" />
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>Compliance</CardTitle>
-          <CardDescription>Deliverability & opt-out</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      {showComplianceCard && (
+        <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Compliance</CardTitle>
+            <CardDescription>Deliverability & opt-out</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowComplianceCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="font-medium">Include unsubscribe link</div>
@@ -1111,8 +1416,9 @@ function SendScreen({
             <Input placeholder="mailer.salesmatter.co" className="rounded-xl" />
             <div className="text-xs text-muted-foreground">Remember to set up SPF, DKIM, DMARC.</div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1249,14 +1555,19 @@ function AnalyticsScreen() {
 }
 
 function SettingsScreen() {
+  const [showSmtpCard, setShowSmtpCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>SMTP & Provider</CardTitle>
-          <CardDescription>Credentials are stored securely.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {showSmtpCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>SMTP & Provider</CardTitle>
+              <CardDescription>Credentials are stored securely.</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowSmtpCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Provider</Label>
             <Select defaultValue="sendgrid">
@@ -1286,8 +1597,9 @@ function SettingsScreen() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -1296,7 +1608,7 @@ function SettingsScreen() {
         </CardHeader>
         <CardContent className="space-y-3">
           {["Neo Sekaleli", "Onalerona Maine", "Khutso Moleleki", "Motheo Modisaesi", "Thato Seekoei"].map((name, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border p-2">
+            <div key={i} className="flex items-center justify-between rounded-xl border p-2 bg-muted/20">
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8"><AvatarFallback>{name.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
                 <div>
@@ -1327,6 +1639,13 @@ function SettingsScreen() {
 export default function SalesAutomationUI() {
   const [section, setSection] = useState<string>("import");
   const [step, setStep] = useState<number>(0);
+  // Lead lists (folders) and active list selection
+  const defaultListId = "default";
+  const [leadLists, setLeadLists] = useState<LeadList[]>([
+    { id: defaultListId, name: "Sample Leads", leads: initialLeads },
+  ]);
+  const [currentListId, setCurrentListId] = useState<string>(defaultListId);
+  // Local working set mirrors the active list
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   // LinkedIn enrichment flow replaces generic enrichment toggles
   const [template, setTemplate] = useState<string>(
@@ -1347,16 +1666,89 @@ export default function SalesAutomationUI() {
   }, [subject, template, leads]);
 
   const onImportCSV = async (file: File) => {
-    // Demo: append a mock row after a brief delay
-    const text = await file.text();
-    console.log("Imported CSV sample:", text.slice(0, 80));
-    const id = String(Date.now());
-    setLeads((prev) => [
-      ...prev,
-      { id, firstName: "Taylor", lastName: "Nkosi", company: "Example Pty", email: "taylor@example.com", title: "Ops Manager", website: "https://example.com", status: "new" },
-    ]);
-    // Navigate to LinkedIn enrichment after import
-    setSection("enrich");
+    try {
+      // 1) Parse CSV on the client
+      const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
+        Papa.parse<Record<string, any>>(file, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h: string) => String(h || "").trim(),
+          complete: (res: Papa.ParseResult<Record<string, any>>) => resolve(res),
+          error: (err: any) => reject(err),
+        });
+      });
+
+      const rows = (parsed.data || []).filter((r) => r && Object.keys(r).length > 0);
+      const columns = (parsed.meta.fields || []).filter(Boolean) as string[];
+
+      if (!rows.length || !columns.length) {
+        console.warn("CSV appears empty or has no headers");
+        return;
+      }
+
+      // 2) Ask the backend LLM to map headers and provide sample normalization
+      const resp = await fetch("/api/map-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
+      });
+
+      let headerMapping: Record<string, string> | null = null;
+      let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
+
+      if (resp.ok) {
+        const data = await resp.json();
+        headerMapping = data?.headerMapping ?? null;
+        rules = data?.rules;
+      }
+
+      if (!headerMapping) {
+        console.warn("Falling back to heuristic header mapping");
+        headerMapping = guessHeaderMapping(columns);
+      }
+
+      // 3) Apply the mapping to all rows locally
+      const mapped: Lead[] = rows
+        .map((r: Record<string, any>, idx: number) => {
+          const normalized = applyMapping(r, headerMapping!, rules);
+          const hasAny = Boolean(
+            normalized.email ||
+            normalized.linkedin ||
+            normalized.company ||
+            normalized.firstName ||
+            normalized.lastName
+          );
+          if (!hasAny) return null;
+          return {
+            id: `${Date.now()}-${idx}`,
+            firstName: normalized.firstName || "",
+            lastName: normalized.lastName || "",
+            company: normalized.company || "",
+            email: (normalized.email || "").toLowerCase(),
+            title: normalized.title || "",
+            website: normalized.website || undefined,
+            linkedin: normalized.linkedin || undefined,
+            status: "new" as const,
+          };
+        })
+        .filter(Boolean) as Lead[];
+
+      if (!mapped.length) {
+        console.warn("No valid leads produced from CSV");
+        return;
+      }
+
+      // Create a new lead list (folder) for each uploaded file
+      const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
+      const newId = `${Date.now()}`;
+      const newList: LeadList = { id: newId, name: base, leads: mapped };
+      setLeadLists((prev) => [...prev, newList]);
+      setCurrentListId(newId);
+      setLeads(mapped);
+      setSection("enrich");
+    } catch (err) {
+      console.error("Import failed", err);
+    }
   };
 
   const onConnectCRM = (provider: string) => {
@@ -1399,6 +1791,65 @@ export default function SalesAutomationUI() {
   };
 
   const approvedCount = leads.filter((l) => l.status === "approved").length;
+
+  // Keep the current list in sync with local leads state
+  useEffect(() => {
+    setLeadLists((prev) => {
+      let changed = false;
+      const next = prev.map((lst) => {
+        if (lst.id !== currentListId) return lst;
+        if (lst.leads === leads) return lst;
+        changed = true;
+        return { ...lst, leads };
+      });
+      return changed ? next : prev;
+    });
+  }, [leads, currentListId]);
+
+  // When switching lists, load its leads into local state
+  // Only react to list ID changes to avoid sync loops with the writer effect above.
+  useEffect(() => {
+    const selected = leadLists.find((l) => l.id === currentListId);
+    if (selected) {
+      setLeads(selected.leads);
+    }
+  }, [currentListId]);
+
+  // Sidebar list actions
+  const newEmptyList = () => {
+    const newId = `${Date.now()}`;
+    const list: LeadList = { id: newId, name: `List ${leadLists.length + 1}`, leads: [] };
+    setLeadLists((prev) => [...prev, list]);
+    setCurrentListId(newId);
+    setLeads([]);
+  };
+  const selectList = (id: string) => setCurrentListId(id);
+  const removeListById = (id: string) => {
+    setLeadLists((prev) => {
+      const filtered = prev.filter((l) => l.id !== id);
+      if (id === currentListId) {
+        const nextId = filtered[0]?.id || "";
+        setCurrentListId(nextId);
+        const nextLeads = filtered.find((l) => l.id === nextId)?.leads || [];
+        setLeads(nextLeads);
+      }
+      return filtered;
+    });
+  };
+
+  // Lead removal helpers for ImportScreen
+  const removeLead = (leadId: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    // Also remove any generated email entry tied to that lead
+    setEmails((prev) => {
+      const { [leadId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+  const clearLeads = () => {
+    setLeads([]);
+    setEmails({});
+  };
 
   // Simulate sending with batches
   useEffect(() => {
@@ -1443,7 +1894,18 @@ export default function SalesAutomationUI() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <div className="flex">
-        <Sidebar current={section} onChange={setSection} />
+        <Sidebar
+          current={section}
+          onChange={setSection}
+          lists={leadLists}
+          currentListId={currentListId}
+          onSelectList={selectList}
+          onNewList={newEmptyList}
+          onRemoveList={removeListById}
+          onRenameList={(id, name) =>
+            setLeadLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)))
+          }
+        />
         <div className="flex-1">
           <Topbar />
           <main className="mx-auto max-w-[1440px] xl:max-w-[1600px] px-4 py-6 space-y-4">
@@ -1460,7 +1922,13 @@ export default function SalesAutomationUI() {
             </div>
 
             {section === "import" && (
-              <ImportScreen leads={leads} onImportCSV={onImportCSV} onConnectCRM={onConnectCRM} />
+              <ImportScreen
+                leads={leads}
+                onImportCSV={onImportCSV}
+                onConnectCRM={onConnectCRM}
+                onRemoveLead={removeLead}
+                onClearLeads={clearLeads}
+              />
             )}
 
             {section === "enrich" && (
@@ -1520,6 +1988,7 @@ export default function SalesAutomationUI() {
           </main>
         </div>
       </div>
+      <FooterSection />
     </div>
   );
 }
