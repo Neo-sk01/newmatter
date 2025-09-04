@@ -144,13 +144,7 @@ const initialLeads: Lead[] = [
   },
 ];
 
-const chartData = [
-  { day: "Mon", sent: 40, opened: 18, replied: 3 },
-  { day: "Tue", sent: 80, opened: 42, replied: 9 },
-  { day: "Wed", sent: 60, opened: 33, replied: 6 },
-  { day: "Thu", sent: 120, opened: 76, replied: 12 },
-  { day: "Fri", sent: 100, opened: 51, replied: 10 },
-];
+// Chart data is now fetched dynamically from SendGrid API
 
 // System prompt for AI email generation (MambaOnline Email Marketing Agent)
 const SYSTEM_PROMPT = `I'm giving you three information.
@@ -1124,31 +1118,94 @@ function SendScreen({
 }
 
 function AnalyticsScreen() {
+  const [analyticsData, setAnalyticsData] = useState<{
+    chartData: Array<{ day: string; sent: number; opened: number; replied: number }>;
+    kpis: { openRate: string; replyRate: string; bounceRate: string };
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/analytics?days=7');
+        const data = await response.json();
+        
+        if (response.ok) {
+          setAnalyticsData(data);
+          setError(null);
+        } else {
+          setError(data.error || 'Failed to fetch analytics');
+        }
+      } catch (err) {
+        setError('Failed to fetch analytics data');
+        console.error('Analytics fetch error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, []);
+
+  // Use real data if available, otherwise fallback to mock data
+  const displayData = analyticsData || {
+    chartData: [
+      { day: "Mon", sent: 40, opened: 18, replied: 3 },
+      { day: "Tue", sent: 80, opened: 42, replied: 9 },
+      { day: "Wed", sent: 60, opened: 33, replied: 6 },
+      { day: "Thu", sent: 120, opened: 76, replied: 12 },
+      { day: "Fri", sent: 100, opened: 51, replied: 10 },
+    ],
+    kpis: {
+      openRate: "42%",
+      replyRate: "9%",
+      bounceRate: "1.2%"
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader>
           <CardTitle>Campaign Performance</CardTitle>
-          <CardDescription>Daily sending vs opens & replies</CardDescription>
+          <CardDescription>
+            Daily sending vs opens & replies
+            {error && (
+              <span className="text-amber-600 text-sm ml-2">
+                (Using mock data - {error})
+              </span>
+            )}
+          </CardDescription>
         </CardHeader>
         <CardContent className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ left: 8, right: 8 }}>
-              <defs>
-                <linearGradient id="sent" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="currentColor" stopOpacity={0.35} />
-                  <stop offset="95%" stopColor="currentColor" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <RTooltip />
-              <Area type="monotone" dataKey="sent" stroke="currentColor" fill="url(#sent)" />
-              <Area type="monotone" dataKey="opened" stroke="currentColor" fillOpacity={0.1} />
-              <Area type="monotone" dataKey="replied" stroke="currentColor" fillOpacity={0.05} />
-            </AreaChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current mx-auto mb-2"></div>
+                <p className="text-sm text-muted-foreground">Loading analytics...</p>
+              </div>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={displayData.chartData} margin={{ left: 8, right: 8 }}>
+                <defs>
+                  <linearGradient id="sent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="currentColor" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="currentColor" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="day" />
+                <YAxis />
+                <RTooltip />
+                <Area type="monotone" dataKey="sent" stroke="currentColor" fill="url(#sent)" />
+                <Area type="monotone" dataKey="opened" stroke="currentColor" fillOpacity={0.1} />
+                <Area type="monotone" dataKey="replied" stroke="currentColor" fillOpacity={0.05} />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
@@ -1161,21 +1218,27 @@ function AnalyticsScreen() {
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="text-xs text-muted-foreground">Open rate</div>
-              <div className="text-xl font-semibold">42%</div>
+              <div className="text-xl font-semibold">
+                {loading ? "..." : displayData.kpis.openRate}
+              </div>
             </div>
             <MailCheck className="h-5 w-5" />
           </div>
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="text-xs text-muted-foreground">Reply rate</div>
-              <div className="text-xl font-semibold">9%</div>
+              <div className="text-xl font-semibold">
+                {loading ? "..." : displayData.kpis.replyRate}
+              </div>
             </div>
             <AlignLeft className="h-5 w-5" />
           </div>
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="text-xs text-muted-foreground">Bounce rate</div>
-              <div className="text-xl font-semibold">1.2%</div>
+              <div className="text-xl font-semibold">
+                {loading ? "..." : displayData.kpis.bounceRate}
+              </div>
             </div>
             <Inbox className="h-5 w-5" />
           </div>
