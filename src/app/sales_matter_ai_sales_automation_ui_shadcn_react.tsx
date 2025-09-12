@@ -1179,52 +1179,57 @@ function GenerateScreen({
         </Card>
       )}
 
-      <section className="lg:col-span-3 xl:col-span-4 space-y-3">
-        <div>
-          <div className="text-base font-semibold">Live Preview</div>
-          <div className="text-sm text-muted-foreground">AI stream or token-filled preview</div>
-        </div>
-        <div className="space-y-3">
-          <div className="grid gap-2">
-            <Label>Company Name</Label>
-            <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="rounded-xl" placeholder="ClarinsMen" />
+      <Card className="rounded-2xl lg:col-span-3 xl:col-span-4 flex flex-col max-h-[calc(100vh-264px)] w-[85%] max-w-[85%]">
+        <CardHeader>
+          <CardTitle>Live Preview</CardTitle>
+          <CardDescription>AI stream or token-filled preview</CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-auto">
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              <Label>Company Name</Label>
+              <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="rounded-xl" placeholder="ClarinsMen" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Prompt</Label>
+              <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} className="min-h-24 rounded-2xl" placeholder="High-level goal, angle, or notes" />
+            </div>
+            <div className="grid gap-2">
+              <Label>LinkedIn Description</Label>
+              <Textarea value={linkedinDescription} onChange={(e) => setLinkedinDescription(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste the brand/recipient description from LinkedIn" />
+            </div>
+            <div className="grid gap-2">
+              <Label>Blog Posts</Label>
+              <Textarea value={blogPosts} onChange={(e) => setBlogPosts(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste 1–3 relevant blog post excerpts" />
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
+                {aiLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+                  </>
+                ) : (
+                  <>
+                    <BrainCircuit className="mr-2 h-4 w-4" /> Generate with AI
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" onClick={onGenerate} disabled={aiLoading} className="rounded-xl">
+                <Play className="mr-2 h-4 w-4" /> Token fill (local)
+              </Button>
+            </div>
+            {aiError && (
+              <div className="text-sm text-destructive">{aiError}</div>
+            )}
+            <div className="grid gap-2">
+              <Label>Preview Output</Label>
+              <ScrollArea className="h-[240px] w-[85%] max-w-[85%] rounded-2xl border">
+                <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{aiText || preview || "(Preview will appear here)"}</pre>
+              </ScrollArea>
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label>Prompt</Label>
-            <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} className="min-h-24 rounded-2xl" placeholder="High-level goal, angle, or notes" />
-          </div>
-          <div className="grid gap-2">
-            <Label>LinkedIn Description</Label>
-            <Textarea value={linkedinDescription} onChange={(e) => setLinkedinDescription(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste the brand/recipient description from LinkedIn" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Blog Posts</Label>
-            <Textarea value={blogPosts} onChange={(e) => setBlogPosts(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste 1–3 relevant blog post excerpts" />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
-              {aiLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <BrainCircuit className="mr-2 h-4 w-4" /> Generate with AI
-                </>
-              )}
-            </Button>
-            <Button variant="outline" onClick={onGenerate} disabled={aiLoading} className="rounded-xl">
-              <Play className="mr-2 h-4 w-4" /> Token fill (local)
-            </Button>
-          </div>
-          {aiError && (
-            <div className="text-sm text-destructive">{aiError}</div>
-          )}
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap rounded-2xl border p-3 bg-muted/30">{aiText || preview || "(Preview will appear here)"}</pre>
-          </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   );
 }
