@@ -1,6 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import sgClient from '@sendgrid/client';
 
+// Define types for SendGrid API response
+interface SendGridMetrics {
+  delivered?: number;
+  unique_opens?: number;
+  unique_clicks?: number;
+  bounces?: number;
+}
+
+interface SendGridStat {
+  metrics?: SendGridMetrics;
+}
+
+interface SendGridStatsResponse {
+  date: string;
+  stats: SendGridStat[];
+}
+
+interface ChartDataPoint {
+  day: string;
+  sent: number;
+  opened: number;
+  replied: number;
+  date?: string;
+}
+
 // Initialize SendGrid client
 sgClient.setApiKey(process.env.SENDGRID_API_KEY || '');
 
@@ -37,10 +62,10 @@ export async function GET(req: NextRequest) {
     };
 
     const [response] = await sgClient.request(request);
-    const stats = response.body as any[];
+    const stats = response.body as SendGridStatsResponse[];
 
     // Process the data to match our chart format
-    const chartData = stats.map((stat: any) => ({
+    const chartData = stats.map((stat: SendGridStatsResponse) => ({
       day: new Date(stat.date).toLocaleDateString('en-US', { weekday: 'short' }),
       sent: stat.stats[0]?.metrics?.delivered || 0,
       opened: stat.stats[0]?.metrics?.unique_opens || 0,
@@ -49,15 +74,15 @@ export async function GET(req: NextRequest) {
     }));
 
     // Calculate KPIs
-    const totalSent = chartData.reduce((sum: number, day: any) => sum + day.sent, 0);
-    const totalOpened = chartData.reduce((sum: number, day: any) => sum + day.opened, 0);
-    const totalReplied = chartData.reduce((sum: number, day: any) => sum + day.replied, 0);
+    const totalSent = chartData.reduce((sum: number, day: ChartDataPoint) => sum + day.sent, 0);
+    const totalOpened = chartData.reduce((sum: number, day: ChartDataPoint) => sum + day.opened, 0);
+    const totalReplied = chartData.reduce((sum: number, day: ChartDataPoint) => sum + day.replied, 0);
 
     const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0.0';
     const replyRate = totalSent > 0 ? ((totalReplied / totalSent) * 100).toFixed(1) : '0.0';
     
     // Calculate bounce rate (delivered - bounces)
-    const totalBounces = stats.reduce((sum: number, stat: any) => 
+    const totalBounces = stats.reduce((sum: number, stat: SendGridStatsResponse) => 
       sum + (stat.stats[0]?.metrics?.bounces || 0), 0
     );
     const bounceRate = totalSent > 0 ? ((totalBounces / totalSent) * 100).toFixed(1) : '0.0';
