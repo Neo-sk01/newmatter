@@ -1037,6 +1037,78 @@ function GenerateScreen({
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiText, setAiText] = useState("");
   // Inputs for the MambaOnline AI flow
+  // --- Prompt DB & Campaign integration ---
+  type PromptVersion = { version: number; content: string; createdAt: string };
+  type Prompt = { id: string; name: string; tags?: string[]; createdAt: string; updatedAt: string; versions: PromptVersion[] };
+  type CampaignSelection = { promptId: string; version: number };
+  type Campaign = { id: string; name: string; createdAt: string; updatedAt: string; promptSelections: CampaignSelection[] };
+
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
+  const [selectedPromptId, setSelectedPromptId] = useState<string>("");
+  const [selectedVersion, setSelectedVersion] = useState<number | "">("");
+  const [savingAttach, setSavingAttach] = useState(false);
+  const selectedPrompt = prompts.find((p) => p.id === selectedPromptId) || null;
+  const selectedVersionObj = selectedPrompt?.versions.find((v) => v.version === selectedVersion) || null;
+
+  useEffect(() => {
+    // Load prompts and campaigns to power the selectors
+    const load = async () => {
+      try {
+        const [pr, cr] = await Promise.all([
+          fetch("/api/prompts").then((r) => r.json()).catch(() => ({ ok: false })),
+          fetch("/api/campaigns").then((r) => r.json()).catch(() => ({ ok: false })),
+        ]);
+        if (pr?.ok && Array.isArray(pr.data)) setPrompts(pr.data);
+        if (cr?.ok && Array.isArray(cr.data)) setCampaigns(cr.data);
+      } catch (e) {
+        console.warn("Failed to load prompts/campaigns", e);
+      }
+    };
+    load();
+  }, []);
+
+  useEffect(() => {
+    // Reset version when prompt changes
+    setSelectedVersion("");
+  }, [selectedPromptId]);
+
+  const useVersionAsTemplate = () => {
+    if (selectedVersionObj) {
+      setTemplate(selectedVersionObj.content);
+    }
+  };
+
+  const attachSelectionToCampaign = async () => {
+    if (!selectedCampaignId || !selectedPromptId || !selectedVersion) return;
+    setSavingAttach(true);
+    try {
+      // Fetch campaign to merge selection
+      const cr = await fetch(`/api/campaigns/${selectedCampaignId}`);
+      if (!cr.ok) throw new Error("Campaign not found");
+      const cjson = await cr.json();
+      const campaign: Campaign | null = cjson?.data ?? null;
+      if (!campaign) throw new Error("Campaign not found");
+      const exists = campaign.promptSelections.some(
+        (s) => s.promptId === selectedPromptId && s.version === selectedVersion
+      );
+      const nextSelections: CampaignSelection[] = exists
+        ? campaign.promptSelections
+        : [...campaign.promptSelections, { promptId: selectedPromptId, version: selectedVersion as number }];
+
+      const pr = await fetch(`/api/campaigns/${selectedCampaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptSelections: nextSelections }),
+      });
+      if (!pr.ok) throw new Error("Failed to attach");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSavingAttach(false);
+    }
+  };
   const [companyName, setCompanyName] = useState("ClarinsMen");
   const [customPrompt, setCustomPrompt] = useState("");
   const [linkedinDescription, setLinkedinDescription] = useState("");
@@ -1473,6 +1545,69 @@ function AnalyticsScreen() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Prompt Database & Campaign selection */}
+      <Card className="rounded-2xl lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Prompt Templates & Campaigns</CardTitle>
+          <CardDescription>
+            Select a prompt and version, preview its content, and optionally attach it to a campaign for A/B testing.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid gap-2">
+              <Label>Campaign</Label>
+              <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select campaign" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {campaigns.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Prompt Template</Label>
+              <Select value={selectedPromptId} onValueChange={setSelectedPromptId}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select prompt" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {prompts.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Version</Label>
+              <Select value={String(selectedVersion)} onValueChange={(v) => setSelectedVersion(Number(v))}>
+                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select version" /></SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {(selectedPrompt?.versions || []).map((v) => (
+                    <SelectItem key={v.version} value={String(v.version)}>v{v.version} · {new Date(v.createdAt).toLocaleString()}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid items-end">
+              <div className="flex gap-2">
+                <Button variant="secondary" className="rounded-xl" disabled={!selectedVersionObj} onClick={useVersionAsTemplate}>
+                  Use this version
+                </Button>
+                <Button className="rounded-xl" disabled={!selectedCampaignId || !selectedVersionObj || savingAttach} onClick={attachSelectionToCampaign}>
+                  {savingAttach ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Attach to campaign
+                </Button>
+              </div>
+            </div>
+          </div>
+          {selectedVersionObj && (
+            <div className="grid gap-2">
+              <Label>Version Preview</Label>
+              <Textarea value={selectedVersionObj.content} readOnly className="min-h-32 rounded-2xl" />
+            </div>
+          )}
+        </CardContent>
+      </Card>
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader>
           <CardTitle>Campaign Performance</CardTitle>
