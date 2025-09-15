@@ -1022,6 +1022,8 @@ function GenerateScreen({
   template,
   selectedLeadId,
   setSelectedLeadId,
+  onEdit,
+  onMarkGenerated,
 }: {
   leads: Lead[];
   emails: Record<string, GeneratedEmail>;
@@ -1029,6 +1031,8 @@ function GenerateScreen({
   template: string;
   selectedLeadId: string | null;
   setSelectedLeadId: (id: string | null) => void;
+  onEdit: (leadId: string, value: GeneratedEmail) => void;
+  onMarkGenerated: () => void;
 }) {
   const selected = useMemo(() => {
     if (!leads.length) return null;
@@ -1047,27 +1051,85 @@ function GenerateScreen({
 
   const preview = previewFor(selected);
 
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+
+  const parseSubjectBody = (txt: string): { subject: string; body: string } => {
+    let subject = "";
+    let body = txt?.trim() ?? "";
+    const match = body.match(/^[Ss]ubject\s*:\s*(.*)$/m);
+    if (match) {
+      subject = match[1].trim();
+      const after = body.split(match[0])[1] ?? "";
+      const parts = after.replace(/^\n+/, "").split(/\n\n/);
+      body = (parts.length > 1 ? parts.slice(1).join("\n\n") : after).trim();
+    } else {
+      const lines = body.split(/\n+/);
+      subject = (lines[0] || "").slice(0, 120).trim();
+      body = lines.slice(1).join("\n").trim();
+    }
+    return { subject, body };
+  };
+
+  const generateAllWithAI = async () => {
+    if (!leads.length) return;
+    setBulkGenerating(true);
+    setBulkProgress({ done: 0, total: leads.length });
+    try {
+      for (let i = 0; i < leads.length; i++) {
+        const l = leads[i];
+        const prompt = `Receiver information:\nCompany Name: ${l.company}\nKnown lead context: ${l.firstName} ${l.lastName} ${l.title ? '(' + l.title + ')' : ''}${l.company ? ' at ' + l.company : ''}\n\nFirstly (prompt):\nGenerate a concise, compelling, personalized cold email introducing our solution, based on the system guidance.\n\nSecondly (LinkedIn description):\n${l.linkedin || ''}\n\nThirdly (blog posts):\n\nReturn with a line starting with 'Subject:' followed by a blank line and then the email body.`;
+        try {
+          const res = await fetch("/api/generate-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt, system: SYSTEM_PROMPT }),
+          });
+          if (!res.ok || !res.body) throw new Error("Request failed");
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let done = false;
+          let buf = "";
+          while (!done) {
+            const { value, done: doneReading } = await reader.read();
+            done = doneReading;
+            const chunk = decoder.decode(value || new Uint8Array(), { stream: true });
+            if (chunk) buf += chunk;
+          }
+          const parsed = parseSubjectBody(buf);
+          onEdit(l.id, { leadId: l.id, subject: parsed.subject, body: parsed.body });
+        } catch (e) {
+          onEdit(l.id, { leadId: l.id, subject: tokenFill(subject, l), body: tokenFill(template, l) });
+        }
+        setBulkProgress({ done: i + 1, total: leads.length });
+      }
+      onMarkGenerated();
+    } finally {
+      setBulkGenerating(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1">
+      <Card className="rounded-2xl lg:col-span-1 overflow-hidden">
         <CardHeader>
           <CardTitle>Imported Leads</CardTitle>
           <CardDescription>Select a lead to preview</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[calc(100vh-260px)]">
+          <ScrollArea className="h-[calc(100vh-260px)]">
             <div className="divide-y">
               {leads.map((l) => (
                 <button
                   key={l.id}
                   onClick={() => setSelectedLeadId(l.id)}
                   className={cx(
-                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50',
+                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50 min-w-0',
                     selected?.id === l.id && 'bg-muted'
                   )}
                 >
-                  <Avatar className="h-8 w-8"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
-                  <div className="min-w-0">
+                  <Avatar className="h-8 w-8 flex-shrink-0"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
+                  <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
                     <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
                   </div>
@@ -1082,9 +1144,19 @@ function GenerateScreen({
       </Card>
 
       <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Preview</CardTitle>
-          <CardDescription>Output of your generated prompt</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Preview</CardTitle>
+            <CardDescription>Output of your generated prompt</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {bulkGenerating && (
+              <div className="text-xs text-muted-foreground">Generating {bulkProgress.done}/{bulkProgress.total}…</div>
+            )}
+            <Button onClick={generateAllWithAI} disabled={bulkGenerating} className="rounded-xl">
+              <BrainCircuit className="mr-2 h-4 w-4" /> Generate
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {selected ? (
@@ -1097,7 +1169,7 @@ function GenerateScreen({
               <div className="grid gap-2">
                 <Label>Body</Label>
                 <ScrollArea className="h-[360px] rounded-2xl border">
-                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                  <pre className="whitespace-pre-wrap break-words p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
                 </ScrollArea>
               </div>
             </>
@@ -1144,25 +1216,25 @@ function PreviewScreenMinimal({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1">
+      <Card className="rounded-2xl lg:col-span-1 overflow-hidden">
         <CardHeader>
           <CardTitle>Imported Leads</CardTitle>
           <CardDescription>Select a lead to preview</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[calc(100vh-260px)]">
+          <ScrollArea className="h-[calc(100vh-260px)]">
             <div className="divide-y">
               {leads.map((l) => (
                 <button
                   key={l.id}
                   onClick={() => setSelectedLeadId(l.id)}
                   className={cx(
-                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50',
+                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50 min-w-0',
                     selected?.id === l.id && 'bg-muted'
                   )}
                 >
-                  <Avatar className="h-8 w-8"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
-                  <div className="min-w-0">
+                  <Avatar className="h-8 w-8 flex-shrink-0"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
+                  <div className="min-w-0 flex-1 overflow-hidden">
                     <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
                     <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
                   </div>
@@ -1192,7 +1264,7 @@ function PreviewScreenMinimal({
               <div className="grid gap-2">
                 <Label>Body</Label>
                 <ScrollArea className="h-[360px] rounded-2xl border">
-                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                  <pre className="whitespace-pre-wrap break-words p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
                 </ScrollArea>
               </div>
             </>
@@ -1262,7 +1334,7 @@ function ReviewScreen({
                               <DialogTitle>{ge?.subject}</DialogTitle>
                               <DialogDescription>To: {l.email}</DialogDescription>
                             </DialogHeader>
-                            <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
+                            <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap break-words">
                               {ge?.body}
                             </div>
                           </DialogContent>
@@ -2004,6 +2076,8 @@ return (
                 template={template}
                 selectedLeadId={selectedLeadId}
                 setSelectedLeadId={setSelectedLeadId}
+                onEdit={handleEdit}
+                onMarkGenerated={() => setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })))}
               />
             )}
 
