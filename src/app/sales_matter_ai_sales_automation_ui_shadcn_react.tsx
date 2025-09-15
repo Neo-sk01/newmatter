@@ -46,6 +46,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
+import { WorkspaceProvider } from "@/lib/context/workspace-context";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import FooterSection from "@/components/footer-section";
@@ -658,10 +660,7 @@ function Topbar() {
             <DropdownMenuItem className="gap-2"><Checkbox /> Approved</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Avatar className="h-8 w-8">
-          <AvatarImage src="https://i.pravatar.cc/100?img=12" alt="User" />
-          <AvatarFallback>NS</AvatarFallback>
-        </Avatar>
+        <WorkspaceSwitcher />
       </div>
     </div>
   );
@@ -1991,6 +1990,10 @@ export default function SalesAutomationUI() {
     setEmails({});
   };
 
+  const renameList = (id: string, name: string) => {
+    setLeadLists((prev) => prev.map((list) => (list.id === id ? { ...list, name } : list)));
+  };
+
   // Simulate sending with batches
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -2025,13 +2028,13 @@ export default function SalesAutomationUI() {
     const map: Record<number, string> = { 0: "import", 1: "enrich", 2: "generate", 3: "review", 4: "send", 5: "analytics" };
     setSection(map[step] || "import");
   }, [step]);
-
   useEffect(() => {
     const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, review: 3, send: 4, analytics: 5, settings: 5 };
     setStep(map[section] ?? 0);
   }, [section]);
 
-  return (
+return (
+  <WorkspaceProvider>
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <div className="flex">
         <Sidebar
@@ -2042,24 +2045,12 @@ export default function SalesAutomationUI() {
           onSelectList={selectList}
           onNewList={newEmptyList}
           onRemoveList={removeListById}
-          onRenameList={(id, name) =>
-            setLeadLists((prev) => prev.map((l) => (l.id === id ? { ...l, name } : l)))
-          }
+          onRenameList={renameList}
         />
         <div className="flex-1">
           <Topbar />
-          <main className="mx-auto max-w-[1440px] xl:max-w-[1600px] px-4 py-6 space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <Stepper step={step} onStep={setStep} />
-              <div className="hidden sm:flex items-center gap-2">
-                <Button variant="outline" size="sm" className="rounded-xl">
-                  <ChevronRight className="mr-2 h-4 w-4" /> Quick tour
-                </Button>
-                <Button size="sm" className="rounded-xl">
-                  <ArrowRight className="mr-2 h-4 w-4" /> Next step
-                </Button>
-              </div>
-            </div>
+          <main className="p-4 space-y-4">
+            <Stepper step={step} onStep={setStep} />
 
             {section === "import" && (
               <ImportScreen
@@ -2130,5 +2121,6 @@ export default function SalesAutomationUI() {
       </div>
       <FooterSection />
     </div>
-  );
+  </WorkspaceProvider>
+);
 }
