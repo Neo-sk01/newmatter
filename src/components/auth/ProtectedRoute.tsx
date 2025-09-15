@@ -30,7 +30,12 @@ export function ProtectedRoute({
     if (!isLoaded) return;
 
     if (!isSignedIn) {
-      router.push('/sign-in');
+      // Redirect to company-specific sign-in when companyId is known
+      if (companyId) {
+        router.push(`/${companyId}/sign-in`);
+      } else {
+        router.push('/sign-in');
+      }
       return;
     }
 

@@ -444,6 +444,7 @@ function Sidebar({
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
     { key: "generate", label: "Generate", icon: <BrainCircuit className="h-6 w-6" /> },
+    { key: "preview", label: "Preview", icon: <Search className="h-6 w-6" /> },
     { key: "review", label: "Review", icon: <FileText className="h-6 w-6" /> },
     { key: "send", label: "Send", icon: <Mail className="h-6 w-6" /> },
     { key: "analytics", label: "Analytics", icon: <LineChart className="h-6 w-6" /> },
@@ -1015,218 +1016,189 @@ function EnrichScreen({
 }
 
 function GenerateScreen({
-  template,
-  setTemplate,
+  leads,
+  emails,
   subject,
-  setSubject,
-  preview,
-  onGenerate,
-  lead,
+  template,
+  selectedLeadId,
+  setSelectedLeadId,
 }: {
-  template: string;
-  setTemplate: (v: string) => void;
+  leads: Lead[];
+  emails: Record<string, GeneratedEmail>;
   subject: string;
-  setSubject: (v: string) => void;
-  preview: string;
-  onGenerate: () => void;
-  lead: Lead | null;
+  template: string;
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
 }) {
-  const tokens = ["firstName", "lastName", "company", "title", "website"];
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiText, setAiText] = useState("");
-  // Inputs for the MambaOnline AI flow
-  // --- Prompt DB & Campaign integration ---
-  type PromptVersion = { version: number; content: string; createdAt: string };
-  type Prompt = { id: string; name: string; tags?: string[]; createdAt: string; updatedAt: string; versions: PromptVersion[] };
-  type CampaignSelection = { promptId: string; version: number };
-  type Campaign = { id: string; name: string; createdAt: string; updatedAt: string; promptSelections: CampaignSelection[] };
+  const selected = useMemo(() => {
+    if (!leads.length) return null;
+    const id = selectedLeadId && leads.some(l => l.id === selectedLeadId) ? selectedLeadId : leads[0].id;
+    return leads.find(l => l.id === id) ?? null;
+  }, [leads, selectedLeadId]);
 
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>("");
-  const [selectedPromptId, setSelectedPromptId] = useState<string>("");
-  const [selectedVersion, setSelectedVersion] = useState<number | "">("");
-  const [savingAttach, setSavingAttach] = useState(false);
-  const selectedPrompt = prompts.find((p) => p.id === selectedPromptId) || null;
-  const selectedVersionObj = selectedPrompt?.versions.find((v) => v.version === selectedVersion) || null;
-
-  useEffect(() => {
-    // Load prompts and campaigns to power the selectors
-    const load = async () => {
-      try {
-        const [pr, cr] = await Promise.all([
-          fetch("/api/prompts").then((r) => r.json()).catch(() => ({ ok: false })),
-          fetch("/api/campaigns").then((r) => r.json()).catch(() => ({ ok: false })),
-        ]);
-        if (pr?.ok && Array.isArray(pr.data)) setPrompts(pr.data);
-        if (cr?.ok && Array.isArray(cr.data)) setCampaigns(cr.data);
-      } catch (e) {
-        console.warn("Failed to load prompts/campaigns", e);
-      }
+  const previewFor = (l: Lead | null) => {
+    if (!l) return { subject: '', body: '' };
+    const ge = emails[l.id];
+    return {
+      subject: ge?.subject ?? tokenFill(subject, l),
+      body: ge?.body ?? tokenFill(template, l),
     };
-    load();
-  }, []);
-
-  useEffect(() => {
-    // Reset version when prompt changes
-    setSelectedVersion("");
-  }, [selectedPromptId]);
-
-  const useVersionAsTemplate = () => {
-    if (selectedVersionObj) {
-      setTemplate(selectedVersionObj.content);
-    }
   };
 
-  const attachSelectionToCampaign = async () => {
-    if (!selectedCampaignId || !selectedPromptId || !selectedVersion) return;
-    setSavingAttach(true);
-    try {
-      // Fetch campaign to merge selection
-      const cr = await fetch(`/api/campaigns/${selectedCampaignId}`);
-      if (!cr.ok) throw new Error("Campaign not found");
-      const cjson = await cr.json();
-      const campaign: Campaign | null = cjson?.data ?? null;
-      if (!campaign) throw new Error("Campaign not found");
-      const exists = campaign.promptSelections.some(
-        (s) => s.promptId === selectedPromptId && s.version === selectedVersion
-      );
-      const nextSelections: CampaignSelection[] = exists
-        ? campaign.promptSelections
-        : [...campaign.promptSelections, { promptId: selectedPromptId, version: selectedVersion as number }];
+  const preview = previewFor(selected);
 
-      const pr = await fetch(`/api/campaigns/${selectedCampaignId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ promptSelections: nextSelections }),
-      });
-      if (!pr.ok) throw new Error("Failed to attach");
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSavingAttach(false);
-    }
-  };
-  const [companyName, setCompanyName] = useState("ClarinsMen");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [linkedinDescription, setLinkedinDescription] = useState("");
-  const [blogPosts, setBlogPosts] = useState("");
-  const [showTemplateCard, setShowTemplateCard] = useState(true);
-
-  const handleAIGenerate = async () => {
-    setAiError(null);
-    setAiText("");
-    setAiLoading(true);
-    // Compose "three information" content per the provided instructions
-    const prompt = `Receiver information:\nCompany Name: ${companyName}\nKnown lead context: ${lead?.firstName ?? ""} ${lead?.lastName ?? ""} at ${lead?.company ?? ""}\n\nFirstly (prompt):\n${customPrompt}\n\nSecondly (LinkedIn description):\n${linkedinDescription}\n\nThirdly (blog posts):\n${blogPosts}`;
-    try {
-      const res = await fetch("/api/generate-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, system: SYSTEM_PROMPT }),
-      });
-      if (!res.ok || !res.body) throw new Error("Request failed");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value || new Uint8Array(), { stream: true });
-        if (chunkValue) setAiText((prev) => prev + chunkValue);
-      }
-    } catch (e) {
-      setAiError("Failed to generate. Please try again.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {showTemplateCard && (
-        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Prompt Template</CardTitle>
-              <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
-            </div>
-            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowTemplateCard(false)}>Delete</Button>
-          </CardHeader>
-          <CardContent className="space-y-4 overflow-auto">
-          <div className="grid gap-2">
-            <Label>Subject</Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="rounded-xl" placeholder="Quick idea for {{company}}" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Body</Label>
-            <Textarea value={template} onChange={(e) => setTemplate(e.target.value)} className="min-h-[220px] rounded-2xl" placeholder={"Hi {{firstName}},\n\nI noticed {{company}} ..."} />
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Tokens:</span>
-              {tokens.map((t) => (
-                <Badge key={t} variant="outline" className="rounded-xl">{`{${t}}`}</Badge>
-              ))}
-            </div>
-          </div>
-          </CardContent>
-          <CardFooter className="justify-between">
-          <div className="text-xs text-muted-foreground">Model: GPT-4 class · Avg ~180 tokens / email</div>
-          <Button onClick={onGenerate} className="rounded-xl">
-            <BrainCircuit className="mr-2 h-4 w-4" /> Generate for all leads
-          </Button>
-          </CardFooter>
-        </Card>
-      )}
-
-      <Card className="rounded-2xl lg:col-span-3 xl:col-span-4 flex flex-col max-h-[calc(100vh-264px)] w-[85%] max-w-[85%]">
+      <Card className="rounded-2xl lg:col-span-1">
         <CardHeader>
-          <CardTitle>Live Preview</CardTitle>
-          <CardDescription>AI stream or token-filled preview</CardDescription>
+          <CardTitle>Imported Leads</CardTitle>
+          <CardDescription>Select a lead to preview</CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 overflow-auto">
-          <div className="space-y-3">
-            <div className="grid gap-2">
-              <Label>Company Name</Label>
-              <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="rounded-xl" placeholder="ClarinsMen" />
+        <CardContent className="p-0">
+          <ScrollArea className="max-h-[calc(100vh-260px)]">
+            <div className="divide-y">
+              {leads.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setSelectedLeadId(l.id)}
+                  className={cx(
+                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50',
+                    selected?.id === l.id && 'bg-muted'
+                  )}
+                >
+                  <Avatar className="h-8 w-8"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
+                    <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
+                  </div>
+                </button>
+              ))}
+              {leads.length === 0 && (
+                <div className="p-4 text-sm text-muted-foreground">No leads yet. Import a CSV to begin.</div>
+              )}
             </div>
-            <div className="grid gap-2">
-              <Label>Prompt</Label>
-              <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} className="min-h-24 rounded-2xl" placeholder="High-level goal, angle, or notes" />
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Preview</CardTitle>
+          <CardDescription>Output of your generated prompt</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <ScrollArea className="h-[360px] rounded-2xl border">
+                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                </ScrollArea>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PreviewScreenMinimal({
+  leads,
+  emails,
+  subject,
+  template,
+  selectedLeadId,
+  setSelectedLeadId,
+}: {
+  leads: Lead[];
+  emails: Record<string, GeneratedEmail>;
+  subject: string;
+  template: string;
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
+}) {
+  const selected = useMemo(() => {
+    if (!leads.length) return null;
+    const id = selectedLeadId && leads.some(l => l.id === selectedLeadId) ? selectedLeadId : leads[0].id;
+    return leads.find(l => l.id === id) ?? null;
+  }, [leads, selectedLeadId]);
+
+  const previewFor = (l: Lead | null) => {
+    if (!l) return { subject: '', body: '' };
+    const ge = emails[l.id];
+    return {
+      subject: ge?.subject ?? tokenFill(subject, l),
+      body: ge?.body ?? tokenFill(template, l),
+    };
+  };
+
+  const preview = previewFor(selected);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="rounded-2xl lg:col-span-1">
+        <CardHeader>
+          <CardTitle>Imported Leads</CardTitle>
+          <CardDescription>Select a lead to preview</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="max-h-[calc(100vh-260px)]">
+            <div className="divide-y">
+              {leads.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setSelectedLeadId(l.id)}
+                  className={cx(
+                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50',
+                    selected?.id === l.id && 'bg-muted'
+                  )}
+                >
+                  <Avatar className="h-8 w-8"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
+                    <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
+                  </div>
+                </button>
+              ))}
+              {leads.length === 0 && (
+                <div className="p-4 text-sm text-muted-foreground">No leads yet. Import a CSV to begin.</div>
+              )}
             </div>
-            <div className="grid gap-2">
-              <Label>LinkedIn Description</Label>
-              <Textarea value={linkedinDescription} onChange={(e) => setLinkedinDescription(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste the brand/recipient description from LinkedIn" />
-            </div>
-            <div className="grid gap-2">
-              <Label>Blog Posts</Label>
-              <Textarea value={blogPosts} onChange={(e) => setBlogPosts(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste 1–3 relevant blog post excerpts" />
-            </div>
-            <div className="flex gap-2">
-              <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
-                {aiLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
-                  </>
-                ) : (
-                  <>
-                    <BrainCircuit className="mr-2 h-4 w-4" /> Generate with AI
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" onClick={onGenerate} disabled={aiLoading} className="rounded-xl">
-                <Play className="mr-2 h-4 w-4" /> Token fill (local)
-              </Button>
-            </div>
-            {aiError && (
-              <div className="text-sm text-destructive">{aiError}</div>
-            )}
-            <div className="grid gap-2">
-              <Label>Preview Output</Label>
-              <ScrollArea className="h-[240px] w-[85%] max-w-[85%] rounded-2xl border">
-                <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{aiText || preview || "(Preview will appear here)"}</pre>
-              </ScrollArea>
-            </div>
-          </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Preview</CardTitle>
+          <CardDescription>Output of your generated prompt</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <ScrollArea className="h-[360px] rounded-2xl border">
+                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                </ScrollArea>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -1549,67 +1521,15 @@ function AnalyticsScreen() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Prompt Database & Campaign selection */}
       <Card className="rounded-2xl lg:col-span-3">
         <CardHeader>
-          <CardTitle>Prompt Templates & Campaigns</CardTitle>
-          <CardDescription>
-            Select a prompt and version, preview its content, and optionally attach it to a campaign for A/B testing.
-          </CardDescription>
+          <CardTitle>Campaign Analytics</CardTitle>
+          <CardDescription>Performance metrics and insights</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="grid gap-2">
-              <Label>Campaign</Label>
-              <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select campaign" /></SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {campaigns.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Prompt Template</Label>
-              <Select value={selectedPromptId} onValueChange={setSelectedPromptId}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select prompt" /></SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {prompts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Version</Label>
-              <Select value={String(selectedVersion)} onValueChange={(v) => setSelectedVersion(Number(v))}>
-                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select version" /></SelectTrigger>
-                <SelectContent className="rounded-xl">
-                  {(selectedPrompt?.versions || []).map((v) => (
-                    <SelectItem key={v.version} value={String(v.version)}>v{v.version} · {new Date(v.createdAt).toLocaleString()}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid items-end">
-              <div className="flex gap-2">
-                <Button variant="secondary" className="rounded-xl" disabled={!selectedVersionObj} onClick={useVersionAsTemplate}>
-                  Use this version
-                </Button>
-                <Button className="rounded-xl" disabled={!selectedCampaignId || !selectedVersionObj || savingAttach} onClick={attachSelectionToCampaign}>
-                  {savingAttach ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                  Attach to campaign
-                </Button>
-              </div>
-            </div>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            Analytics dashboard coming soon
           </div>
-          {selectedVersionObj && (
-            <div className="grid gap-2">
-              <Label>Version Preview</Label>
-              <Textarea value={selectedVersionObj.content} readOnly className="min-h-32 rounded-2xl" />
-            </div>
-          )}
         </CardContent>
       </Card>
       <Card className="rounded-2xl lg:col-span-2">
@@ -1796,6 +1716,7 @@ export default function SalesAutomationUI() {
   const [progress, setProgress] = useState(0);
   const [batchSize, setBatchSize] = useState(20);
   const [schedule, setSchedule] = useState<Date | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   // Preview using the first lead
   const preview = useMemo(() => {
@@ -1954,6 +1875,15 @@ export default function SalesAutomationUI() {
     }
   }, [currentListId]);
 
+  // Keep a sensible selection for the minimal preview screen
+  useEffect(() => {
+    if (!leads.length) {
+      setSelectedLeadId(null);
+    } else if (!selectedLeadId || !leads.some(l => l.id === selectedLeadId)) {
+      setSelectedLeadId(leads[0].id);
+    }
+  }, [leads, selectedLeadId]);
+
   // Sidebar list actions
   const newEmptyList = () => {
     const newId = `${Date.now()}`;
@@ -2029,7 +1959,7 @@ export default function SalesAutomationUI() {
     setSection(map[step] || "import");
   }, [step]);
   useEffect(() => {
-    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, review: 3, send: 4, analytics: 5, settings: 5 };
+    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, preview: 2, review: 3, send: 4, analytics: 5, settings: 5 };
     setStep(map[section] ?? 0);
   }, [section]);
 
@@ -2050,7 +1980,7 @@ return (
         <div className="flex-1">
           <Topbar />
           <main className="p-4 space-y-4">
-            <Stepper step={step} onStep={setStep} />
+            {section !== 'preview' && <Stepper step={step} onStep={setStep} />}
 
             {section === "import" && (
               <ImportScreen
@@ -2068,13 +1998,23 @@ return (
 
             {section === "generate" && (
               <GenerateScreen
-                template={template}
-                setTemplate={setTemplate}
+                leads={leads}
+                emails={emails}
                 subject={subject}
-                setSubject={setSubject}
-                preview={preview}
-                onGenerate={runGeneration}
-                lead={leads[0] ?? null}
+                template={template}
+                selectedLeadId={selectedLeadId}
+                setSelectedLeadId={setSelectedLeadId}
+              />
+            )}
+
+            {section === 'preview' && (
+              <PreviewScreenMinimal
+                leads={leads}
+                emails={emails}
+                subject={subject}
+                template={template}
+                selectedLeadId={selectedLeadId}
+                setSelectedLeadId={setSelectedLeadId}
               />
             )}
 
