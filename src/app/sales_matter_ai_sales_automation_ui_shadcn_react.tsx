@@ -1024,6 +1024,8 @@ function GenerateScreen({
   setSelectedLeadId,
   onEdit,
   onMarkGenerated,
+  promptOverrides,
+  onUpdatePrompt,
 }: {
   leads: Lead[];
   emails: Record<string, GeneratedEmail>;
@@ -1033,6 +1035,8 @@ function GenerateScreen({
   setSelectedLeadId: (id: string | null) => void;
   onEdit: (leadId: string, value: GeneratedEmail) => void;
   onMarkGenerated: () => void;
+  promptOverrides: Record<string, string>;
+  onUpdatePrompt: (leadId: string, value: string) => void;
 }) {
   const selected = useMemo(() => {
     if (!leads.length) return null;
@@ -1053,6 +1057,11 @@ function GenerateScreen({
 
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+
+  const buildPromptForLead = (l: Lead) => {
+    const known = `${l.firstName} ${l.lastName}${l.title ? ' (' + l.title + ')' : ''}${l.company ? ' at ' + l.company : ''}`;
+    return `Receiver information:\nCompany Name: ${l.company}\nKnown lead context: ${known}\n\nFirstly (prompt):\nGenerate a concise, compelling, personalized cold email introducing our solution, based on the system guidance.\n\nSecondly (LinkedIn description):\n${l.linkedin || ''}\n\nThirdly (blog posts):\n\nReturn with a line starting with 'Subject:' followed by a blank line and then the email body.`;
+  };
 
   const parseSubjectBody = (txt: string): { subject: string; body: string } => {
     let subject = "";
@@ -1078,7 +1087,7 @@ function GenerateScreen({
     try {
       for (let i = 0; i < leads.length; i++) {
         const l = leads[i];
-        const prompt = `Receiver information:\nCompany Name: ${l.company}\nKnown lead context: ${l.firstName} ${l.lastName} ${l.title ? '(' + l.title + ')' : ''}${l.company ? ' at ' + l.company : ''}\n\nFirstly (prompt):\nGenerate a concise, compelling, personalized cold email introducing our solution, based on the system guidance.\n\nSecondly (LinkedIn description):\n${l.linkedin || ''}\n\nThirdly (blog posts):\n\nReturn with a line starting with 'Subject:' followed by a blank line and then the email body.`;
+        const prompt = promptOverrides[l.id] ?? buildPromptForLead(l);
         try {
           const res = await fetch("/api/generate-email", {
             method: "POST",
@@ -1111,37 +1120,12 @@ function GenerateScreen({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Imported Leads</CardTitle>
-          <CardDescription>Select a lead to preview</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-260px)]">
-            <div className="divide-y">
-              {leads.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => setSelectedLeadId(l.id)}
-                  className={cx(
-                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50 min-w-0',
-                    selected?.id === l.id && 'bg-muted'
-                  )}
-                >
-                  <Avatar className="h-8 w-8 flex-shrink-0"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
-                    <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
-                  </div>
-                </button>
-              ))}
-              {leads.length === 0 && (
-                <div className="p-4 text-sm text-muted-foreground">No leads yet. Import a CSV to begin.</div>
-              )}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      <LeadListPanel
+        leads={leads}
+        selectedLeadId={selectedLeadId}
+        onSelect={(id) => setSelectedLeadId(id)}
+        className="lg:col-span-1"
+      />
 
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between">
@@ -1164,13 +1148,39 @@ function GenerateScreen({
               <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
               <div className="grid gap-2">
                 <Label>Subject</Label>
-                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+                <Input
+                  value={(selected && (emails[selected.id]?.subject ?? tokenFill(subject, selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    const base = emails[selected.id] ?? { leadId: selected.id, subject: tokenFill(subject, selected), body: tokenFill(template, selected) };
+                    onEdit(selected.id, { ...base, subject: e.target.value });
+                  }}
+                  className="rounded-xl"
+                />
               </div>
               <div className="grid gap-2">
                 <Label>Body</Label>
-                <ScrollArea className="h-[360px] rounded-2xl border">
-                  <pre className="whitespace-pre-wrap break-words p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
-                </ScrollArea>
+                <Textarea
+                  value={(selected && (emails[selected.id]?.body ?? tokenFill(template, selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    const base = emails[selected.id] ?? { leadId: selected.id, subject: tokenFill(subject, selected), body: tokenFill(template, selected) };
+                    onEdit(selected.id, { ...base, body: e.target.value });
+                  }}
+                  className="min-h-[280px] rounded-2xl"
+                />
+              </div>
+              <Separator />
+              <div className="grid gap-2">
+                <Label>Prompt Preview</Label>
+                <Textarea
+                  value={(selected && (promptOverrides[selected.id] ?? buildPromptForLead(selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    onUpdatePrompt(selected.id, e.target.value);
+                  }}
+                  className="min-h-[200px] rounded-2xl text-xs"
+                />
               </div>
             </>
           ) : (
@@ -1179,6 +1189,114 @@ function GenerateScreen({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function LeadListPanel({
+  leads,
+  selectedLeadId,
+  onSelect,
+  className,
+}: {
+  leads: Lead[];
+  selectedLeadId: string | null;
+  onSelect: (id: string) => void;
+  className?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return leads;
+    return leads.filter((l) =>
+      [l.firstName, l.lastName, l.company, l.email]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [query, leads]);
+
+  const statusClass = (s: Lead["status"]) =>
+    s === "approved"
+      ? "bg-green-100 text-green-700 border-green-200"
+      : s === "generated"
+      ? "bg-amber-100 text-amber-800 border-amber-200"
+      : s === "enriched"
+      ? "bg-blue-100 text-blue-800 border-blue-200"
+      : s === "sent"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+      : s === "rejected"
+      ? "bg-red-100 text-red-800 border-red-200"
+      : "bg-gray-100 text-gray-700 border-gray-200";
+
+  return (
+    <Card className={cx("rounded-2xl overflow-hidden", className)}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Leads</CardTitle>
+            <CardDescription>{leads.length} total</CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, company, email"
+            className="rounded-xl pl-9"
+          />
+        </div>
+        <ScrollArea className="h-[calc(100vh-320px)] pr-2">
+          <div className="grid gap-2">
+            {filtered.map((l) => {
+              const selected = selectedLeadId === l.id;
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => onSelect(l.id)}
+                  className={cx(
+                    "w-full text-left rounded-xl border p-3 hover:bg-muted/50 transition-colors",
+                    selected && "bg-muted ring-1 ring-ring/50"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-9 w-9 flex-shrink-0">
+                      <AvatarFallback>
+                        {l.firstName?.[0]}
+                        {l.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium truncate">
+                          {l.firstName} {l.lastName}
+                        </div>
+                        <Badge variant="outline" className={cx("rounded-xl text-[10px]", statusClass(l.status))}>
+                          {l.status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {l.company}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {l.email}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </div>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="text-sm text-muted-foreground py-8 text-center">
+                No leads match “{query}”.
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1216,37 +1334,12 @@ function PreviewScreenMinimal({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1 overflow-hidden">
-        <CardHeader>
-          <CardTitle>Imported Leads</CardTitle>
-          <CardDescription>Select a lead to preview</CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-260px)]">
-            <div className="divide-y">
-              {leads.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => setSelectedLeadId(l.id)}
-                  className={cx(
-                    'w-full text-left p-3 flex items-center gap-2 hover:bg-muted/50 min-w-0',
-                    selected?.id === l.id && 'bg-muted'
-                  )}
-                >
-                  <Avatar className="h-8 w-8 flex-shrink-0"><AvatarFallback>{l.firstName[0]}{l.lastName[0]}</AvatarFallback></Avatar>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <div className="font-medium truncate">{l.firstName} {l.lastName}</div>
-                    <div className="text-xs text-muted-foreground truncate">{l.company} · {l.email}</div>
-                  </div>
-                </button>
-              ))}
-              {leads.length === 0 && (
-                <div className="p-4 text-sm text-muted-foreground">No leads yet. Import a CSV to begin.</div>
-              )}
-            </div>
-          </ScrollArea>
-        </CardContent>
-      </Card>
+      <LeadListPanel
+        leads={leads}
+        selectedLeadId={selectedLeadId}
+        onSelect={(id) => setSelectedLeadId(id)}
+        className="lg:col-span-1"
+      />
 
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader>
@@ -1788,6 +1881,7 @@ export default function SalesAutomationUI() {
   const [progress, setProgress] = useState(0);
   const [batchSize, setBatchSize] = useState(20);
   const [schedule, setSchedule] = useState<Date | null>(null);
+  const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   // Preview using the first lead
@@ -2078,6 +2172,8 @@ return (
                 setSelectedLeadId={setSelectedLeadId}
                 onEdit={handleEdit}
                 onMarkGenerated={() => setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })))}
+                promptOverrides={promptOverrides}
+                onUpdatePrompt={(id, value) => setPromptOverrides((prev) => ({ ...prev, [id]: value }))}
               />
             )}
 
