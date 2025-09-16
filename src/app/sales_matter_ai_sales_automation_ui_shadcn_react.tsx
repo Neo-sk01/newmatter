@@ -677,20 +677,28 @@ function Stepper({ step, onStep }: { step: number; onStep: (n: number) => void }
     { key: "Analytics", icon: <LineChart className="h-4 w-4" /> },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-muted/30 p-2">
-      {steps.map((s, i) => (
-        <Button
-          key={s.key}
-          variant={i === step ? "secondary" : "ghost"}
-          size="sm"
-          className="rounded-xl"
-          onClick={() => onStep(i)}
-        >
-          <span className="mr-2">{s.icon}</span>
-          <span className="hidden sm:inline">{i + 1}. {s.key}</span>
-          <span className="sm:hidden">{i + 1}</span>
-        </Button>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-lime-700 bg-lime-600 p-2 text-white">
+      {steps.map((s, i) => {
+        const selected = i === step;
+        return (
+          <Button
+            key={s.key}
+            variant="ghost"
+            size="sm"
+            className={cx(
+              "rounded-xl",
+              selected
+                ? "bg-black text-white hover:bg-black hover:text-white"
+                : "text-white/90 hover:text-white hover:bg-black/30"
+            )}
+            onClick={() => onStep(i)}
+          >
+            <span className="mr-2">{s.icon}</span>
+            <span className="hidden sm:inline">{i + 1}. {s.key}</span>
+            <span className="sm:hidden">{i + 1}</span>
+          </Button>
+        );
+      })}
     </div>
   );
 }
