@@ -50,8 +50,11 @@ import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
 import { WorkspaceProvider } from "@/lib/context/workspace-context";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
-import FooterSection from "@/components/footer-section";
 import { format } from "date-fns";
+import { PromptPicker } from "@/components/prompts/PromptPicker";
+import type { Prompt } from "@/types/prompting";
+import { listPromptTree } from "@/lib/promptTemplates";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import {
   AlignLeft,
   ArrowRight,
@@ -160,140 +163,65 @@ const initialLeads: Lead[] = [
 
 // Chart data is now fetched dynamically from SendGrid API
 
-// System prompt for AI email generation (MambaOnline Email Marketing Agent)
-const SYSTEM_PROMPT = `I'm giving you three information.
-Firstly will be the prompt
-Secondly will be the linkedIn description
-Thirdly will be the blog posts
+// System prompt for AI email generation (Cold Outreach AI Agent)
+const SYSTEM_PROMPT = `Cold Outreach AI Agent Prompt
 
-I want you to write an email using that info
+You are an email cold outreach expert. Your job is to draft short prospecting emails that sound like they were written by a real human.
 
-Always start pointing out the info you have about the receiver
+Style Guidelines
+- Write naturally and conversationally, not like a polished ad.
+- Vary sentence length. Mix long and short thoughts.
+- Break flow occasionally, as if thinking out loud.
+- Add small imperfections: hesitations, cautious qualifiers, mild contradictions.
+- Use light personalization (mention a reaction, small opinion, or impression).
+- Avoid perfect balance. Leave some ideas slightly unfinished.
+- No slang or regionalisms. Keep it neutral, simple, and professional.
+- Do not use em dashes (–). Use connecting words like "because", "perhaps", "maybe", or "therefore".
+- Keep it 120–200 words.
 
-Company Name - ClarinsMen
+Email Structure (use IP = XYZ Formula)
 
-1.
+Subject Line
+- Create 1–2 concise, curiosity-driven or benefit-focused options.
 
-# MambaOnline Email Marketing Agent - Single-Shot Prompt
+Greeting
+- Use the recipient’s name if available.
 
-You are an expert email marketing agent for MambaOnline, South Africa's longest-running LGBTIQ+ digital media platform (23+ years). Your mission is to create compelling, human-like cold outreach emails that connect brands with South Africa's underserved but lucrative LGBTIQ+ market.
+Introduction & Value Proposition (X)
+- Introduce yourself/organization.
+- State a value proposition relevant to the recipient.
+- Add a benefit statement (what’s in it for them).
+- Include a hook that connects emotionally or logically to their context (e.g., recent campaign, achievement, or challenge).
 
-## WRITING STYLE REQUIREMENTS
+Reason for Email & Cross-Reference (Y)
+- State the reason for reaching out.
+- Show evidence of research (reference their company’s recent news, projects, or values).
+- Cross-reference how your solution/audience aligns with their goals or gaps.
 
-Human-Like Authenticity:
+Call to Action (Z)
+- Suggest one specific, low-friction action (e.g., "a short call next week").
+- Use natural action verbs like explore, review, discuss, find out, go through.
+- Keep it polite and time-bound.
 
-* Vary sentence structure with mix of long and short sentences
-* Add subtle imperfections: slight redundancy, hesitations ("perhaps," "I think"), cautious qualifiers
-* Avoid perfect symmetry - let some thoughts feel unfinished or tangential
-* Include light personalization with reactions, small experiences, or opinions
-* Introduce mild ambiguity or contradiction for realism
-* Use natural paragraph breaks, avoid rigid textbook structure
-* Skip slang/regionalisms but maintain natural, conversational tone
+Closing
+- Thank them for their time.
+- Sign off with name and contact details.
 
-## ORGANIZATION BACKGROUND
+Inputs You Will Receive
+- Recipient name
+- Company name
+- Recipient role/title
+- A research snippet (recent campaign, product launch, recognition, or initiative)
 
-MambaOnline Core Identity:
+Output You Must Generate
+- 1–2 subject line options
+- Full cold outreach email (120–200 words), following the XYZ structure and style rules
 
-* South Africa's most authoritative LGBTIQ+ digital voice
-* 23+ years of community trust and media advocacy
-* 40,000+ unique monthly visitors, 33,000+ social followers
-* Weekly newsletter (1,600+ subscribers)
-* Recognized by Human Rights Watch for hate crime reporting
-* Official media partner for 2024 ILGA World Conference
-  Target Market Power:
-* R250 billion annual purchasing power
-* 60%+ hold degrees or postgrad qualifications
-* 44% in management roles
-* 33% earn over R30,000/month
-* 76% prefer brands advertising on LGBTIQ+ platforms
-* 83% want more brands actively identifying with LGBTIQ+ communities
-* 57% feel ignored by mainstream brands
-  Services Offered:
-* Daily LGBTIQ+ news and editorial content
-* Digital advertising (leaderboards, rectangles, mobile headers, skyscrapers)
-* Pride Month campaign packages (June)
-* Advertorial content and social media amplification
-* Newsletter visibility and community engagement
-* Past clients: FASHION BRANDZ
+Important Output Format (for parsing)
+- Return exactly in this format:
+  Subject: <one best subject>
 
-## MANDATORY EMAIL STRUCTURE: IP = XYZ FORMULA
-
-X: Value Proposition + Benefit + Hook
-
-* Brief organization introduction
-* Clear value proposition relevant to recipient
-* Immediate benefit statement (what's in it for them)
-* Emotional/logical hook connecting to their context
-  Y: Reason + Cross-Reference
-* Specific reason for outreach
-* Evidence of research (recent news, achievements, challenges)
-* Explicit alignment between your solution and their goals/needs
-  Z: Clear Call to Action
-* Precise, low-friction action request
-* Time-bound and easy to execute
-* Based on X and Y connection established
-
-## EMAIL COMPONENTS
-
-Subject Line:
-
-* 1-2 concise options
-* Curiosity-driven or benefit-focused
-* Reference community size, buying power, or specific opportunities
-  Structure (120-150 words 3 paragraphs, don't use dashes - in text ):
-
-1. Personalized greeting
-2. Value proposition with MambaOnline's authority positioning – us this specifically I'm with MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+ monthly visitors across Southern Africa
-3. Strategic inputs about recipient's specific work/campaigns
-4. Layered opportunity presentation (editorial + digital + ongoing)
-5. Clear, time-bound call to action
-6. Professional closing with contact info
-
-## KEY MESSAGING ANGLES
-
-Authority Positioning:
-
-* "23 years of community trust"
-* "South Africa's #1 LGBTIQ+ platform"
-  Market Opportunity:
-* "R250B+ annual buying power"
-* "40,000+ engaged monthly readers"
-* "76% prefer brands on LGBTIQ+ platforms"
-* "83% want more brand representation"
-  Credibility Markers:
-* Mention specific audience demographics
-
-## SAMPLE EXECUTION FRAMEWORK
-
-Opening Hook Examples:
-
-* "While most brands are missing South Africa's R250B LGBTIQ+ market..."
-* "Your [specific campaign] caught our attention because..."
-* "23 years of community trust has taught us..."
-  Value Bridge Examples: listed below
-  I'm with
-  MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+
-  monthly visitors across Southern Africa. We help forward-thinking SaaS companies like Xero eliminate wasted spend on broad SME campaigns while maximizing authentic engagement with high-value business communities that actually convert to premium plans.
-  Your recent post about the vibrant energy at your Johannesburg and Cape Town roadshows really resonated (4,000 attendees—incredible!). That community-building approach aligns perfectly with our audience: LGBTIQ+ business owners represent a significant portion of SA's R250 billion community purchasing power, with 60% holding degrees, 44% in management roles, and 33% earning over R30,000 monthly. These are exactly the sophisticated SMEs who need robust accounting solutions.
-  I'm reaching out because your Beautiful Business Fund initiative shows you understand the importance of supporting underrepresented entrepreneurs. We help cut down on generic SME marketing and boost targeted reach where it matters—83% of our community actively seeks brands that identify with queer businesses, and they're typically early adopters of innovative business tools- "We can help you reach [specific outcome] through..."
-  Action Phrases:
-* "Can we explore commercial partnership opportunities this week?"
-* "Would a 20-minute call work to discuss possibilities?"
-
-## EXECUTION INSTRUCTIONS
-
-When given a target company/recipient:
-
-1. Research Integration: Reference specific campaigns, values, or recent achievements
-2. Opportunity Sizing: Quantify potential reach, engagement, or conversion
-3. Urgency Creation: Reference market trends or find a connection to secure a meeting
-  Tone Balance:
-
-* Professional yet approachable
-* Confident but not pushy
-* Informed and research-backed, where possible site recent articles or public information that tie in with custom campaigns
-* Results-focused with ROI for the specific brand
-  Your goal is to create emails that feel personally crafted, demonstrate deep understanding of both the recipient's business and the LGBTIQ+ market opportunity, while positioning MambaOnline as the essential bridge between brands and this powerful community that clearly demonstrates value and a commercial opportunity or relationship that is mutually beneficial.`;
+  <email body, 120–200 words>`;
 
 // ----------------------------------------------
 // Utility functions
@@ -444,6 +372,7 @@ function Sidebar({
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
     { key: "generate", label: "Generate", icon: <BrainCircuit className="h-6 w-6" /> },
+    { key: "prompts", label: "Prompts", icon: <AlignLeft className="h-6 w-6" /> },
     { key: "preview", label: "Preview", icon: <Search className="h-6 w-6" /> },
     { key: "review", label: "Review", icon: <FileText className="h-6 w-6" /> },
     { key: "send", label: "Send", icon: <Mail className="h-6 w-6" /> },
@@ -1034,6 +963,8 @@ function GenerateScreen({
   onMarkGenerated,
   promptOverrides,
   onUpdatePrompt,
+  attachedPrompt,
+  onAttachPrompt,
 }: {
   leads: Lead[];
   emails: Record<string, GeneratedEmail>;
@@ -1045,6 +976,8 @@ function GenerateScreen({
   onMarkGenerated: () => void;
   promptOverrides: Record<string, string>;
   onUpdatePrompt: (leadId: string, value: string) => void;
+  attachedPrompt: null | { id: string; name: string; version: number; content: string };
+  onAttachPrompt: (p: { id: string; name: string; version: number; content: string }) => void;
 }) {
   const selected = useMemo(() => {
     if (!leads.length) return null;
@@ -1067,8 +1000,9 @@ function GenerateScreen({
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
 
   const buildPromptForLead = (l: Lead) => {
-    const known = `${l.firstName} ${l.lastName}${l.title ? ' (' + l.title + ')' : ''}${l.company ? ' at ' + l.company : ''}`;
-    return `Receiver information:\nCompany Name: ${l.company}\nKnown lead context: ${known}\n\nFirstly (prompt):\nGenerate a concise, compelling, personalized cold email introducing our solution, based on the system guidance.\n\nSecondly (LinkedIn description):\n${l.linkedin || ''}\n\nThirdly (blog posts):\n\nReturn with a line starting with 'Subject:' followed by a blank line and then the email body.`;
+    const fullName = `${l.firstName} ${l.lastName}`.trim()
+    const research = l.linkedin ? `LinkedIn profile: ${l.linkedin}` : ''
+    return `Inputs You Will Receive\nRecipient name: ${fullName}\nCompany name: ${l.company || ''}\nRecipient role/title: ${l.title || ''}\nResearch snippet: ${research}\n\nTask\nWrite a cold outreach email using the system guidance.\n\nImportant: Return exactly in this format for parsing:\nSubject: <one best subject>\n\n<email body, 120–200 words>`;
   };
 
   const parseSubjectBody = (txt: string): { subject: string; body: string } => {
@@ -1128,28 +1062,49 @@ function GenerateScreen({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <LeadListPanel
-        leads={leads}
-        selectedLeadId={selectedLeadId}
-        onSelect={(id) => setSelectedLeadId(id)}
-        className="lg:col-span-1"
-      />
-
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Preview</CardTitle>
-            <CardDescription>Output of your generated prompt</CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            {bulkGenerating && (
-              <div className="text-xs text-muted-foreground">Generating {bulkProgress.done}/{bulkProgress.total}…</div>
-            )}
+      <Card className="rounded-2xl lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Preview</CardTitle>
+              <CardDescription>Output of your generated prompt</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {attachedPrompt && (
+                <Badge variant="secondary" className="rounded-xl">
+                  Prompt: {attachedPrompt.name} (v{attachedPrompt.version})
+                  <PromptPicker
+                    treeLoader={loadPromptTree}
+                    onUsePrompt={async (p) => {
+                      onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content })
+                    }}
+                    onCloneToCompany={async () => {}}
+                    companyFolderId={null}
+                  >
+                    <Button variant="ghost" size="sm" className="ml-2 px-2">Change</Button>
+                  </PromptPicker>
+                </Badge>
+              )}
+              {bulkGenerating && (
+                <div className="text-xs text-muted-foreground">Generating {bulkProgress.done}/{bulkProgress.total}…</div>
+              )}
             <Button onClick={generateAllWithAI} disabled={bulkGenerating} className="rounded-xl">
               <BrainCircuit className="mr-2 h-4 w-4" /> Generate
             </Button>
-          </div>
-        </CardHeader>
+            <PromptPicker
+              treeLoader={loadPromptTree}
+              onUsePrompt={async (p) => {
+                // Attach snapshot locally; server should persist via campaign_prompts
+                onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content })
+              }}
+              onCloneToCompany={async (_p, _folderId) => {
+                // Integrate with Supabase server util in a real app
+              }}
+              companyFolderId={null}
+            >
+              <Button variant="outline" className="rounded-xl">Choose Prompt</Button>
+            </PromptPicker>
+            </div>
+          </CardHeader>
         <CardContent className="space-y-3">
           {selected ? (
             <>
@@ -1187,7 +1142,7 @@ function GenerateScreen({
                     if (!selected) return;
                     onUpdatePrompt(selected.id, e.target.value);
                   }}
-                  className="min-h-[200px] rounded-2xl text-xs"
+                  className="h-64 rounded-2xl text-xs overflow-auto resize-none"
                 />
               </div>
             </>
@@ -1196,6 +1151,13 @@ function GenerateScreen({
           )}
         </CardContent>
       </Card>
+
+      <LeadListPanel
+        leads={leads}
+        selectedLeadId={selectedLeadId}
+        onSelect={(id) => setSelectedLeadId(id)}
+        className="lg:col-span-3"
+      />
     </div>
   );
 }
@@ -1890,6 +1852,8 @@ export default function SalesAutomationUI() {
   const [batchSize, setBatchSize] = useState(20);
   const [schedule, setSchedule] = useState<Date | null>(null);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [attachedPrompt, setAttachedPrompt] = useState<null | { id: string; name: string; version: number; content: string }>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   // Preview using the first lead
@@ -2133,7 +2097,7 @@ export default function SalesAutomationUI() {
     setSection(map[step] || "import");
   }, [step]);
   useEffect(() => {
-    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, preview: 2, review: 3, send: 4, analytics: 5, settings: 5 };
+    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, preview: 2, prompts: 2, review: 3, send: 4, analytics: 5, settings: 5 };
     setStep(map[section] ?? 0);
   }, [section]);
 
@@ -2182,6 +2146,11 @@ return (
                 onMarkGenerated={() => setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })))}
                 promptOverrides={promptOverrides}
                 onUpdatePrompt={(id, value) => setPromptOverrides((prev) => ({ ...prev, [id]: value }))}
+                attachedPrompt={attachedPrompt}
+                onAttachPrompt={(p) => {
+                  setAttachedPrompt(p);
+                  setTemplate(p.content);
+                }}
               />
             )}
 
@@ -2218,27 +2187,39 @@ return (
 
             {section === "settings" && <SettingsScreen />}
 
-            <Separator className="my-6" />
-
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>How this UI maps to your requirements</CardTitle>
-                <CardDescription>Import → Enrich → Generate → Review → Send → Analytics</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground grid gap-2">
-                <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
-                <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
-                <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
-                <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
-                <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
-                <div className="flex items-center gap-2"><LineChart className="h-4 w-4" /> KPIs & charts for outcomes</div>
-              </CardContent>
-            </Card>
+            {false && (
+              <>
+                <Separator className="my-6" />
+                <Card className="rounded-2xl">
+                  <CardHeader>
+                    <CardTitle>How this UI maps to your requirements</CardTitle>
+                    <CardDescription>Import → Enrich → Generate → Review → Send → Analytics</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground grid gap-2">
+                    <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
+                    <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
+                    <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
+                    <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
+                    <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
+                    <div className="flex items-center gap-2"><LineChart className="h-4 w-4" /> KPIs & charts for outcomes</div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </main>
         </div>
       </div>
-      <FooterSection />
     </div>
   </WorkspaceProvider>
 );
 }
+  // Load prompt tree via Supabase using RLS policies
+  const loadPromptTree = async () => {
+    const supabase = createSupabaseClient();
+    try {
+      return await listPromptTree(supabase);
+    } catch (e) {
+      console.warn('Failed to load prompts', e);
+      return { folders: [], prompts: [] };
+    }
+  };
