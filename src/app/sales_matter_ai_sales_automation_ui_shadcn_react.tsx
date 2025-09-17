@@ -1,6 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
-import Image from "next/image";
+import Papa from "papaparse";
 import {
   Card,
   CardContent,
@@ -14,12 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -44,18 +38,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
+import { WorkspaceProvider } from "@/lib/context/workspace-context";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { PromptPicker } from "@/components/prompts/PromptPicker";
+import type { Prompt, Folder } from "@/types/prompting";
+import { listPromptTree } from "@/lib/promptTemplates";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import {
   AlignLeft,
-  ArrowRight,
   BadgeCheck,
   BrainCircuit,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronRight,
   CloudUpload,
   Database,
@@ -64,20 +62,20 @@ import {
   Filter,
   Inbox,
   LineChart,
-  Loader2,
   Mail,
   MailCheck,
-  MailQuestion,
   Play,
   Search,
   Settings,
-  ShieldCheck,
   StopCircle,
   Upload,
-  Users2,
   Sun,
   Moon,
   Linkedin,
+  Trash2,
+  FolderPlus,
+  Folder,
+  X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import {
@@ -112,12 +110,11 @@ interface GeneratedEmail {
   body: string;
 }
 
-type EnrichOptions = {
-  linkedin: boolean;
-  company: boolean;
-  news: boolean;
-  tech: boolean;
-};
+interface LeadList {
+  id: string;
+  name: string;
+  leads: Lead[];
+}
 
 const initialLeads: Lead[] = [
   {
@@ -146,140 +143,65 @@ const initialLeads: Lead[] = [
 
 // Chart data is now fetched dynamically from SendGrid API
 
-// System prompt for AI email generation (MambaOnline Email Marketing Agent)
-const SYSTEM_PROMPT = `I'm giving you three information.
-Firstly will be the prompt
-Secondly will be the linkedIn description
-Thirdly will be the blog posts
+// System prompt for AI email generation (Cold Outreach AI Agent)
+const SYSTEM_PROMPT = `Cold Outreach AI Agent Prompt
 
-I want you to write an email using that info
+You are an email cold outreach expert. Your job is to draft short prospecting emails that sound like they were written by a real human.
 
-Always start pointing out the info you have about the receiver
+Style Guidelines
+- Write naturally and conversationally, not like a polished ad.
+- Vary sentence length. Mix long and short thoughts.
+- Break flow occasionally, as if thinking out loud.
+- Add small imperfections: hesitations, cautious qualifiers, mild contradictions.
+- Use light personalization (mention a reaction, small opinion, or impression).
+- Avoid perfect balance. Leave some ideas slightly unfinished.
+- No slang or regionalisms. Keep it neutral, simple, and professional.
+- Do not use em dashes (–). Use connecting words like "because", "perhaps", "maybe", or "therefore".
+- Keep it 120–200 words.
 
-Company Name - ClarinsMen
+Email Structure (use IP = XYZ Formula)
 
-1.
+Subject Line
+- Create 1–2 concise, curiosity-driven or benefit-focused options.
 
-# MambaOnline Email Marketing Agent - Single-Shot Prompt
+Greeting
+- Use the recipient’s name if available.
 
-You are an expert email marketing agent for MambaOnline, South Africa's longest-running LGBTIQ+ digital media platform (23+ years). Your mission is to create compelling, human-like cold outreach emails that connect brands with South Africa's underserved but lucrative LGBTIQ+ market.
+Introduction & Value Proposition (X)
+- Introduce yourself/organization.
+- State a value proposition relevant to the recipient.
+- Add a benefit statement (what’s in it for them).
+- Include a hook that connects emotionally or logically to their context (e.g., recent campaign, achievement, or challenge).
 
-## WRITING STYLE REQUIREMENTS
+Reason for Email & Cross-Reference (Y)
+- State the reason for reaching out.
+- Show evidence of research (reference their company’s recent news, projects, or values).
+- Cross-reference how your solution/audience aligns with their goals or gaps.
 
-Human-Like Authenticity:
+Call to Action (Z)
+- Suggest one specific, low-friction action (e.g., "a short call next week").
+- Use natural action verbs like explore, review, discuss, find out, go through.
+- Keep it polite and time-bound.
 
-* Vary sentence structure with mix of long and short sentences
-* Add subtle imperfections: slight redundancy, hesitations ("perhaps," "I think"), cautious qualifiers
-* Avoid perfect symmetry - let some thoughts feel unfinished or tangential
-* Include light personalization with reactions, small experiences, or opinions
-* Introduce mild ambiguity or contradiction for realism
-* Use natural paragraph breaks, avoid rigid textbook structure
-* Skip slang/regionalisms but maintain natural, conversational tone
+Closing
+- Thank them for their time.
+- Sign off with name and contact details.
 
-## ORGANIZATION BACKGROUND
+Inputs You Will Receive
+- Recipient name
+- Company name
+- Recipient role/title
+- A research snippet (recent campaign, product launch, recognition, or initiative)
 
-MambaOnline Core Identity:
+Output You Must Generate
+- 1–2 subject line options
+- Full cold outreach email (120–200 words), following the XYZ structure and style rules
 
-* South Africa's most authoritative LGBTIQ+ digital voice
-* 23+ years of community trust and media advocacy
-* 40,000+ unique monthly visitors, 33,000+ social followers
-* Weekly newsletter (1,600+ subscribers)
-* Recognized by Human Rights Watch for hate crime reporting
-* Official media partner for 2024 ILGA World Conference
-  Target Market Power:
-* R250 billion annual purchasing power
-* 60%+ hold degrees or postgrad qualifications
-* 44% in management roles
-* 33% earn over R30,000/month
-* 76% prefer brands advertising on LGBTIQ+ platforms
-* 83% want more brands actively identifying with LGBTIQ+ communities
-* 57% feel ignored by mainstream brands
-  Services Offered:
-* Daily LGBTIQ+ news and editorial content
-* Digital advertising (leaderboards, rectangles, mobile headers, skyscrapers)
-* Pride Month campaign packages (June)
-* Advertorial content and social media amplification
-* Newsletter visibility and community engagement
-* Past clients: FASHION BRANDZ
+Important Output Format (for parsing)
+- Return exactly in this format:
+  Subject: <one best subject>
 
-## MANDATORY EMAIL STRUCTURE: IP = XYZ FORMULA
-
-X: Value Proposition + Benefit + Hook
-
-* Brief organization introduction
-* Clear value proposition relevant to recipient
-* Immediate benefit statement (what's in it for them)
-* Emotional/logical hook connecting to their context
-  Y: Reason + Cross-Reference
-* Specific reason for outreach
-* Evidence of research (recent news, achievements, challenges)
-* Explicit alignment between your solution and their goals/needs
-  Z: Clear Call to Action
-* Precise, low-friction action request
-* Time-bound and easy to execute
-* Based on X and Y connection established
-
-## EMAIL COMPONENTS
-
-Subject Line:
-
-* 1-2 concise options
-* Curiosity-driven or benefit-focused
-* Reference community size, buying power, or specific opportunities
-  Structure (120-150 words 3 paragraphs, don't use dashes - in text ):
-
-1. Personalized greeting
-2. Value proposition with MambaOnline's authority positioning – us this specifically I'm with MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+ monthly visitors across Southern Africa
-3. Strategic inputs about recipient's specific work/campaigns
-4. Layered opportunity presentation (editorial + digital + ongoing)
-5. Clear, time-bound call to action
-6. Professional closing with contact info
-
-## KEY MESSAGING ANGLES
-
-Authority Positioning:
-
-* "23 years of community trust"
-* "South Africa's #1 LGBTIQ+ platform"
-  Market Opportunity:
-* "R250B+ annual buying power"
-* "40,000+ engaged monthly readers"
-* "76% prefer brands on LGBTIQ+ platforms"
-* "83% want more brand representation"
-  Credibility Markers:
-* Mention specific audience demographics
-
-## SAMPLE EXECUTION FRAMEWORK
-
-Opening Hook Examples:
-
-* "While most brands are missing South Africa's R250B LGBTIQ+ market..."
-* "Your [specific campaign] caught our attention because..."
-* "23 years of community trust has taught us..."
-  Value Bridge Examples: listed below
-  I'm with
-  MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+
-  monthly visitors across Southern Africa. We help forward-thinking SaaS companies like Xero eliminate wasted spend on broad SME campaigns while maximizing authentic engagement with high-value business communities that actually convert to premium plans.
-  Your recent post about the vibrant energy at your Johannesburg and Cape Town roadshows really resonated (4,000 attendees—incredible!). That community-building approach aligns perfectly with our audience: LGBTIQ+ business owners represent a significant portion of SA's R250 billion community purchasing power, with 60% holding degrees, 44% in management roles, and 33% earning over R30,000 monthly. These are exactly the sophisticated SMEs who need robust accounting solutions.
-  I'm reaching out because your Beautiful Business Fund initiative shows you understand the importance of supporting underrepresented entrepreneurs. We help cut down on generic SME marketing and boost targeted reach where it matters—83% of our community actively seeks brands that identify with queer businesses, and they're typically early adopters of innovative business tools- "We can help you reach [specific outcome] through..."
-  Action Phrases:
-* "Can we explore commercial partnership opportunities this week?"
-* "Would a 20-minute call work to discuss possibilities?"
-
-## EXECUTION INSTRUCTIONS
-
-When given a target company/recipient:
-
-1. Research Integration: Reference specific campaigns, values, or recent achievements
-2. Opportunity Sizing: Quantify potential reach, engagement, or conversion
-3. Urgency Creation: Reference market trends or find a connection to secure a meeting
-  Tone Balance:
-
-* Professional yet approachable
-* Confident but not pushy
-* Informed and research-backed, where possible site recent articles or public information that tie in with custom campaigns
-* Results-focused with ROI for the specific brand
-  Your goal is to create emails that feel personally crafted, demonstrate deep understanding of both the recipient's business and the LGBTIQ+ market opportunity, while positioning MambaOnline as the essential bridge between brands and this powerful community that clearly demonstrates value and a commercial opportunity or relationship that is mutually beneficial.`;
+  <email body, 120–200 words>`;
 
 // ----------------------------------------------
 // Utility functions
@@ -295,15 +217,143 @@ const tokenFill = (template: string, lead: Lead) =>
 
 const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
 
+// Apply LLM-provided mapping rules to a CSV row
+function applyMapping(
+  row: Record<string, unknown>,
+  headerMapping: Record<string, string>,
+  rules?: { splitFullName?: { column: string; firstNameFirst?: boolean } }
+) {
+  const out: {
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    email?: string;
+    title?: string | null;
+    website?: string | null;
+    linkedin?: string | null;
+  } = {};
+
+  const get = (k: string) => {
+    const v = row[k];
+    if (v == null) return "";
+    return String(v).trim();
+  };
+
+  const normalizeUrl = (v: string) => {
+    if (!v) return "";
+    let s = v.trim();
+    if (!/^https?:\/\//i.test(s)) {
+      s = s.startsWith("www.") ? `https://${s}` : `https://${s}`;
+    }
+    return s;
+  };
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  for (const [col, field] of Object.entries(headerMapping || {})) {
+    if (!field || field === "ignore") continue;
+    const value = get(col);
+    if (!value) continue;
+    switch (field) {
+      case "firstName":
+        out.firstName = value;
+        break;
+      case "lastName":
+        out.lastName = value;
+        break;
+      case "company":
+        out.company = value;
+        break;
+      case "email":
+        if (emailRe.test(value.toLowerCase())) out.email = value.toLowerCase();
+        break;
+      case "title":
+        out.title = value;
+        break;
+      case "website":
+        out.website = normalizeUrl(value);
+        break;
+      case "linkedin":
+        out.linkedin = normalizeUrl(value);
+        break;
+    }
+  }
+
+  if ((!out.firstName || !out.lastName) && rules?.splitFullName?.column) {
+    const full = get(rules.splitFullName.column);
+    if (full) {
+      const parts = full.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) {
+        out.firstName ??= parts[0];
+      } else if (parts.length >= 2) {
+        const firstIdx = rules.splitFullName.firstNameFirst === false ? parts.length - 1 : 0;
+        const lastIdx = rules.splitFullName.firstNameFirst === false ? 0 : parts.length - 1;
+        out.firstName ??= parts[firstIdx];
+        out.lastName ??= parts.slice(lastIdx).join(" ");
+      }
+    }
+  }
+
+  return out;
+}
+
+// Heuristic fallback if LLM mapping is unavailable
+function guessHeaderMapping(columns: string[]): Record<string, string> {
+  const map: Record<string, string> = {};
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const candidates: Record<string, string[]> = {
+    firstName: ["firstname", "first", "givenname", "fname"],
+    lastName: ["lastname", "last", "surname", "lname"],
+    company: ["company", "organisation", "organization", "org", "employer"],
+    email: ["email", "e-mail", "mail"],
+    title: ["title", "role", "position", "jobtitle"],
+    website: ["website", "site", "url", "domain"],
+    linkedin: ["linkedin", "linkedinurl", "linkedinprofile", "li"],
+  };
+  for (const col of columns) {
+    const n = norm(col);
+    let matched = false;
+    for (const [field, syns] of Object.entries(candidates)) {
+      if (syns.some((s) => n.includes(s))) {
+        map[col] = field;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) map[col] = "ignore";
+  }
+  return map;
+}
+
 // ----------------------------------------------
 // Subcomponents
 // ----------------------------------------------
 
-function Sidebar({ current, onChange }: { current: string; onChange: (v: string) => void }) {
+function Sidebar({
+  current,
+  onChange,
+  lists,
+  currentListId,
+  onSelectList,
+  onNewList,
+  onRemoveList,
+  onRenameList,
+}: {
+  current: string;
+  onChange: (v: string) => void;
+  lists: LeadList[];
+  currentListId: string;
+  onSelectList: (id: string) => void;
+  onNewList: () => void;
+  onRemoveList: (id: string) => void;
+  onRenameList: (id: string, name: string) => void;
+}) {
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
     { key: "generate", label: "Generate", icon: <BrainCircuit className="h-6 w-6" /> },
+    { key: "prompts", label: "Prompts", icon: <AlignLeft className="h-6 w-6" /> },
+    { key: "preview", label: "Preview", icon: <Search className="h-6 w-6" /> },
     { key: "review", label: "Review", icon: <FileText className="h-6 w-6" /> },
     { key: "send", label: "Send", icon: <Mail className="h-6 w-6" /> },
     { key: "analytics", label: "Analytics", icon: <LineChart className="h-6 w-6" /> },
@@ -311,15 +361,12 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
   ];
 
   return (
-    <div className="h-full w-[360px] border-r bg-background/60 backdrop-blur p-[18px] hidden md:block">
+    <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
       <div className="flex items-center gap-2 px-3 pb-6">
-        <Image 
-          src="/salesMattertm (1).png" 
-          alt="SalesMatter Logo" 
-          width={180} 
-          height={60}
+        <img 
+          src="/salesMattertm noBG, SVG.svg" 
+          alt="Sales Matter Logo" 
           className="h-12 w-auto"
-          priority
         />
       </div>
       <nav className="space-y-2">
@@ -340,9 +387,133 @@ function Sidebar({ current, onChange }: { current: string; onChange: (v: string)
         ))}
       </nav>
       <Separator className="my-6" />
+      <div className="px-3 flex items-center justify-between mb-2">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lead Lists</div>
+        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onNewList}>
+          <FolderPlus className="mr-2 h-4 w-4" /> New
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {lists.map((list) => (
+          <SidebarListRow
+            key={list.id}
+            list={list}
+            active={currentListId === list.id}
+            onSelect={() => onSelectList(list.id)}
+            onRemove={() => onRemoveList(list.id)}
+            onRename={(name) => onRenameList(list.id, name)}
+          />
+        ))}
+        {lists.length === 0 && (
+          <div className="px-3 text-xs text-muted-foreground">No lists. Create one to get started.</div>
+        )}
+      </div>
+      <Separator className="my-6" />
       <div className="px-3 text-xs text-muted-foreground">
         v1.0 · Shadcn UI · Tailwind
       </div>
+    </div>
+  );
+}
+
+function SidebarListRow({
+  list,
+  active,
+  onSelect,
+  onRemove,
+  onRename,
+}: {
+  list: LeadList;
+  active: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(list.name);
+
+  const commit = () => {
+    const next = name.trim();
+    if (next && next !== list.name) onRename(next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setName(list.name);
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-1">
+      {!editing ? (
+        <>
+          <Button
+            variant={active ? "secondary" : "ghost"}
+            size="lg"
+            className={cx(
+              "flex-1 justify-start gap-3 rounded-xl text-base min-w-0",
+              active && "shadow"
+            )}
+            onClick={onSelect}
+          >
+            <Folder className="h-6 w-6 flex-shrink-0" />
+            <span className="truncate">{list.name}</span>
+          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Rename list"
+              onClick={() => setEditing(true)}
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Delete list"
+              onClick={onRemove}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 flex-1">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") cancel();
+            }}
+            className="rounded-xl flex-1"
+            autoFocus
+          />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Save name"
+              onClick={commit}
+            >
+              <Check className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Cancel rename"
+              onClick={cancel}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -351,8 +522,8 @@ function Topbar() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const isDark = (resolvedTheme ?? theme) === "dark";
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-background/70 backdrop-blur px-4 py-2">
-      <div className="flex items-center gap-2">
+    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
+      <div className="flex items-center gap-3">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -396,10 +567,7 @@ function Topbar() {
             <DropdownMenuItem className="gap-2"><Checkbox /> Approved</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Avatar className="h-8 w-8">
-          <AvatarImage src="https://i.pravatar.cc/100?img=12" alt="User" />
-          <AvatarFallback>NS</AvatarFallback>
-        </Avatar>
+        <WorkspaceSwitcher />
       </div>
     </div>
   );
@@ -415,20 +583,28 @@ function Stepper({ step, onStep }: { step: number; onStep: (n: number) => void }
     { key: "Analytics", icon: <LineChart className="h-4 w-4" /> },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-muted/30 p-2">
-      {steps.map((s, i) => (
-        <Button
-          key={s.key}
-          variant={i === step ? "secondary" : "ghost"}
-          size="sm"
-          className="rounded-xl"
-          onClick={() => onStep(i)}
-        >
-          <span className="mr-2">{s.icon}</span>
-          <span className="hidden sm:inline">{i + 1}. {s.key}</span>
-          <span className="sm:hidden">{i + 1}</span>
-        </Button>
-      ))}
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-lime-700 bg-lime-600 p-2 text-white">
+      {steps.map((s, i) => {
+        const selected = i === step;
+        return (
+          <Button
+            key={s.key}
+            variant="ghost"
+            size="sm"
+            className={cx(
+              "rounded-xl",
+              selected
+                ? "bg-black text-white hover:bg-black hover:text-white"
+                : "text-white/90 hover:text-white hover:bg-black/30"
+            )}
+            onClick={() => onStep(i)}
+          >
+            <span className="mr-2">{s.icon}</span>
+            <span className="hidden sm:inline">{i + 1}. {s.key}</span>
+            <span className="sm:hidden">{i + 1}</span>
+          </Button>
+        );
+      })}
     </div>
   );
 }
@@ -441,10 +617,14 @@ function ImportScreen({
   leads,
   onImportCSV,
   onConnectCRM,
+  onRemoveLead,
+  onClearLeads,
 }: {
   leads: Lead[];
   onImportCSV: (file: File) => void;
   onConnectCRM: (provider: string) => void;
+  onRemoveLead: (id: string) => void;
+  onClearLeads: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -497,7 +677,16 @@ function ImportScreen({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Input ref={fileRef} type="file" accept=".csv" className="rounded-xl" />
+            <Input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              className="rounded-xl"
+              onChange={(e) => {
+                const f = e.currentTarget.files?.[0];
+                if (f) onImportCSV(f);
+              }}
+            />
             <Button
               className="rounded-xl"
               onClick={() => {
@@ -508,51 +697,52 @@ function ImportScreen({
               <Upload className="mr-2 h-4 w-4" /> Import
             </Button>
           </div>
-          <Separator />
-          <div>
-            <div className="text-sm font-medium mb-2">Detected Columns</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {["firstName", "lastName", "email", "company", "title", "website", "linkedin"].map((field) => (
-                <div key={field} className="flex items-center justify-between rounded-xl border p-2">
-                  <div className="text-sm">{field}</div>
-                  <Select>
-                    <SelectTrigger className="w-[140px] rounded-xl">
-                      <SelectValue placeholder="Map to" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="auto">Auto</SelectItem>
-                      <SelectItem value="ignore">Ignore</SelectItem>
-                      <SelectItem value="custom">Custom…</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Detected Columns section removed as requested */}
         </CardContent>
       </Card>
 
       {/* Removed: Connect CRM container as requested */}
 
       <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
-        <CardHeader>
-          <CardTitle>Lead Preview</CardTitle>
-          <CardDescription>Recently imported leads.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Lead Preview</CardTitle>
+            <CardDescription>Recently imported leads ({leads.length}).</CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              className="rounded-xl"
+              onClick={onClearLeads}
+              disabled={leads.length === 0}
+            >
+              <Trash2 className="mr-2 h-4 w-4" /> Clear list
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[240px]">
+          <ScrollArea className="h-[420px]">
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="sticky top-0 bg-muted/50 z-10">
                   <TableHead>Lead</TableHead>
                   <TableHead>Company</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {leads.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                      No leads imported yet.
+                    </TableCell>
+                  </TableRow>
+                )}
                 {leads.map((l) => (
-                  <TableRow key={l.id}>
+                  <TableRow key={l.id} className="odd:bg-muted/30">
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
@@ -568,6 +758,16 @@ function ImportScreen({
                     <TableCell>{l.email}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="rounded-xl capitalize">{l.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => onRemoveLead(l.id)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Remove
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -603,16 +803,21 @@ function EnrichScreen({
     `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
       `${l.firstName} ${l.lastName} ${l.company}`
     )}`;
+  const [showLinkedInCard, setShowLinkedInCard] = useState(true);
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>LinkedIn Enrichment</CardTitle>
-          <CardDescription>
-            Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full">
+      {showLinkedInCard && (
+        <Card className="rounded-2xl lg:col-span-3 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>LinkedIn Enrichment</CardTitle>
+              <CardDescription>
+                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead&apos;s LinkedIn profile.
+              </CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowLinkedInCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="space-y-4 overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -694,167 +899,549 @@ function EnrichScreen({
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-        <CardFooter className="justify-between">
+          </CardContent>
+          <CardFooter className="justify-between">
           <div className="text-xs text-muted-foreground">
             Tip: Paste the exact profile URL (starts with https://www.linkedin.com/in/...). Leads with URLs can be bulk-marked as enriched.
           </div>
           <Button className="rounded-xl" onClick={onBulkMarkEnriched}>
             <BadgeCheck className="mr-2 h-4 w-4" /> Mark all with URLs as Enriched
           </Button>
-        </CardFooter>
-      </Card>
+          </CardFooter>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>How matching works</CardTitle>
-          <CardDescription>Human-in-the-loop enrichment</CardDescription>
+    </div>
+  );
+}
+
+function PromptsScreen({
+  subject,
+  template,
+  onUpdateSubject,
+  onUpdateTemplate,
+  attachedPrompt,
+  onAttachPrompt,
+  onDetachPrompt,
+  treeLoader,
+  previewLead,
+}: {
+  subject: string;
+  template: string;
+  onUpdateSubject: (value: string) => void;
+  onUpdateTemplate: (value: string) => void;
+  attachedPrompt: null | { id: string; name: string; version: number; content: string };
+  onAttachPrompt: (p: { id: string; name: string; version: number; content: string }) => void;
+  onDetachPrompt: () => void;
+  treeLoader: () => Promise<{ folders: Folder[]; prompts: Prompt[] }>;
+  previewLead: Lead | null;
+}) {
+  const tokens: { token: string; label: string }[] = [
+    { token: "{{firstName}}", label: "Lead first name" },
+    { token: "{{lastName}}", label: "Lead last name" },
+    { token: "{{company}}", label: "Company name" },
+    { token: "{{title}}", label: "Role or title" },
+    { token: "{{email}}", label: "Email address" },
+    { token: "{{linkedin}}", label: "LinkedIn URL" },
+  ];
+
+  const sample = useMemo(() => {
+    if (!previewLead) return null;
+    return {
+      subject: tokenFill(subject, previewLead),
+      body: tokenFill(template, previewLead),
+    };
+  }, [previewLead, subject, template]);
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <Card className="rounded-2xl xl:col-span-2">
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle>Base Prompt Template</CardTitle>
+            <CardDescription>Edit the subject and body templates used when generating emails.</CardDescription>
+          </div>
+          {attachedPrompt && (
+            <Badge variant="secondary" className="rounded-xl">Using {attachedPrompt.name} · v{attachedPrompt.version}</Badge>
+          )}
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            We generate search links using the uploaded CSV fields: first name, last name, company name, and company URL. Use these to find the correct LinkedIn profile and paste the URL to attach it to the lead.
-          </p>
-          <p>
-            This demo does not call LinkedIn APIs. In production, integrate a compliant people search provider or your internal enrichment service.
-          </p>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="prompt-subject">Subject template</Label>
+            <Input
+              id="prompt-subject"
+              value={subject}
+              onChange={(e) => onUpdateSubject(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="prompt-body">Email body template</Label>
+            <Textarea
+              id="prompt-body"
+              value={template}
+              onChange={(e) => onUpdateTemplate(e.target.value)}
+              className="min-h-[360px] rounded-2xl"
+            />
+          </div>
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>Prompt Library</CardTitle>
+            <CardDescription>Browse reusable prompt templates and attach one to this workflow.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {attachedPrompt ? (
+              <div className="rounded-2xl border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium leading-tight">{attachedPrompt.name}</div>
+                    <div className="text-xs text-muted-foreground">v{attachedPrompt.version}</div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="rounded-xl" onClick={onDetachPrompt}>
+                    Remove
+                  </Button>
+                </div>
+                <ScrollArea className="h-32">
+                  <pre className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
+                    {attachedPrompt.content}
+                  </pre>
+                </ScrollArea>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No prompt attached. Choose one below to auto-fill the template.</div>
+            )}
+            <PromptPicker
+              treeLoader={treeLoader}
+              onUsePrompt={async (p) => {
+                onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content });
+              }}
+              onCloneToCompany={async () => {}}
+              companyFolderId={null}
+            >
+              <Button className="rounded-xl w-full" variant="outline">Browse prompt library</Button>
+            </PromptPicker>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>Token Reference & Preview</CardTitle>
+            <CardDescription>Available dynamic fields and a sample fill using your first lead.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {tokens.map((t) => (
+                <div key={t.token} className="rounded-xl border px-3 py-2">
+                  <div className="font-mono text-xs">{t.token}</div>
+                  <div className="text-xs text-muted-foreground">{t.label}</div>
+                </div>
+              ))}
+            </div>
+            {sample ? (
+              <div className="space-y-2">
+                <Label>Sample subject</Label>
+                <Input value={sample.subject} readOnly className="rounded-xl" />
+                <Label>Sample body</Label>
+                <Textarea value={sample.body} readOnly className="h-48 rounded-2xl text-sm" />
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Add a lead to preview how tokens resolve.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function GenerateScreen({
-  template,
-  setTemplate,
+  leads,
+  emails,
   subject,
-  setSubject,
-  preview,
-  onGenerate,
-  lead,
+  template,
+  selectedLeadId,
+  setSelectedLeadId,
+  onEdit,
+  onMarkGenerated,
+  promptOverrides,
+  onUpdatePrompt,
+  attachedPrompt,
+  onAttachPrompt,
 }: {
-  template: string;
-  setTemplate: (v: string) => void;
+  leads: Lead[];
+  emails: Record<string, GeneratedEmail>;
   subject: string;
-  setSubject: (v: string) => void;
-  preview: string;
-  onGenerate: () => void;
-  lead: Lead | null;
+  template: string;
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
+  onEdit: (leadId: string, value: GeneratedEmail) => void;
+  onMarkGenerated: () => void;
+  promptOverrides: Record<string, string>;
+  onUpdatePrompt: (leadId: string, value: string) => void;
+  attachedPrompt: null | { id: string; name: string; version: number; content: string };
+  onAttachPrompt: (p: { id: string; name: string; version: number; content: string }) => void;
 }) {
-  const tokens = ["firstName", "lastName", "company", "title", "website"];
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [aiText, setAiText] = useState("");
-  // Inputs for the MambaOnline AI flow
-  const [companyName, setCompanyName] = useState("ClarinsMen");
-  const [customPrompt, setCustomPrompt] = useState("");
-  const [linkedinDescription, setLinkedinDescription] = useState("");
-  const [blogPosts, setBlogPosts] = useState("");
+  const selected = useMemo(() => {
+    if (!leads.length) return null;
+    const id = selectedLeadId && leads.some(l => l.id === selectedLeadId) ? selectedLeadId : leads[0].id;
+    return leads.find(l => l.id === id) ?? null;
+  }, [leads, selectedLeadId]);
 
-  const handleAIGenerate = async () => {
-    setAiError(null);
-    setAiText("");
-    setAiLoading(true);
-    // Compose "three information" content per the provided instructions
-    const prompt = `Receiver information:\nCompany Name: ${companyName}\nKnown lead context: ${lead?.firstName ?? ""} ${lead?.lastName ?? ""} at ${lead?.company ?? ""}\n\nFirstly (prompt):\n${customPrompt}\n\nSecondly (LinkedIn description):\n${linkedinDescription}\n\nThirdly (blog posts):\n${blogPosts}`;
+  const previewFor = (l: Lead | null) => {
+    if (!l) return { subject: '', body: '' };
+    const ge = emails[l.id];
+    return {
+      subject: ge?.subject ?? tokenFill(subject, l),
+      body: ge?.body ?? tokenFill(template, l),
+    };
+  };
+
+  const preview = previewFor(selected);
+
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+
+  const buildPromptForLead = (l: Lead) => {
+    const fullName = `${l.firstName} ${l.lastName}`.trim()
+    const research = l.linkedin ? `LinkedIn profile: ${l.linkedin}` : ''
+    return `Inputs You Will Receive\nRecipient name: ${fullName}\nCompany name: ${l.company || ''}\nRecipient role/title: ${l.title || ''}\nResearch snippet: ${research}\n\nTask\nWrite a cold outreach email using the system guidance.\n\nImportant: Return exactly in this format for parsing:\nSubject: <one best subject>\n\n<email body, 120–200 words>`;
+  };
+
+  const parseSubjectBody = (txt: string): { subject: string; body: string } => {
+    let subject = "";
+    let body = txt?.trim() ?? "";
+    const match = body.match(/^[Ss]ubject\s*:\s*(.*)$/m);
+    if (match) {
+      subject = match[1].trim();
+      const after = body.split(match[0])[1] ?? "";
+      const parts = after.replace(/^\n+/, "").split(/\n\n/);
+      body = (parts.length > 1 ? parts.slice(1).join("\n\n") : after).trim();
+    } else {
+      const lines = body.split(/\n+/);
+      subject = (lines[0] || "").slice(0, 120).trim();
+      body = lines.slice(1).join("\n").trim();
+    }
+    return { subject, body };
+  };
+
+  const generateAllWithAI = async () => {
+    if (!leads.length) return;
+    setBulkGenerating(true);
+    setBulkProgress({ done: 0, total: leads.length });
     try {
-      const res = await fetch("/api/generate-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, system: SYSTEM_PROMPT }),
-      });
-      if (!res.ok || !res.body) throw new Error("Request failed");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        const chunkValue = decoder.decode(value || new Uint8Array(), { stream: true });
-        if (chunkValue) setAiText((prev) => prev + chunkValue);
+      for (let i = 0; i < leads.length; i++) {
+        const l = leads[i];
+        const prompt = promptOverrides[l.id] ?? buildPromptForLead(l);
+        try {
+          const res = await fetch("/api/generate-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt, system: SYSTEM_PROMPT }),
+          });
+          if (!res.ok || !res.body) throw new Error("Request failed");
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let done = false;
+          let buf = "";
+          while (!done) {
+            const { value, done: doneReading } = await reader.read();
+            done = doneReading;
+            const chunk = decoder.decode(value || new Uint8Array(), { stream: true });
+            if (chunk) buf += chunk;
+          }
+          const parsed = parseSubjectBody(buf);
+          onEdit(l.id, { leadId: l.id, subject: parsed.subject, body: parsed.body });
+        } catch (e) {
+          onEdit(l.id, { leadId: l.id, subject: tokenFill(subject, l), body: tokenFill(template, l) });
+        }
+        setBulkProgress({ done: i + 1, total: leads.length });
       }
-    } catch (e) {
-      setAiError("Failed to generate. Please try again.");
+      onMarkGenerated();
     } finally {
-      setAiLoading(false);
+      setBulkGenerating(false);
     }
   };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Prompt Template</CardTitle>
-          <CardDescription>Use tokens like {`{{firstName}}`}, {`{{company}}`} etc.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-2">
-            <Label>Subject</Label>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="rounded-xl" placeholder="Quick idea for {{company}}" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Body</Label>
-            <Textarea value={template} onChange={(e) => setTemplate(e.target.value)} className="min-h-[220px] rounded-2xl" placeholder={"Hi {{firstName}},\n\nI noticed {{company}} ..."} />
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Tokens:</span>
-              {tokens.map((t) => (
-                <Badge key={t} variant="outline" className="rounded-xl">{`{${t}}`}</Badge>
-              ))}
+      <Card className="rounded-2xl lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Preview</CardTitle>
+              <CardDescription>Output of your generated prompt</CardDescription>
             </div>
-          </div>
+            <div className="flex items-center gap-2">
+              {attachedPrompt && (
+                <Badge variant="secondary" className="rounded-xl">
+                  Prompt: {attachedPrompt.name} (v{attachedPrompt.version})
+                  <PromptPicker
+                    treeLoader={loadPromptTree}
+                    onUsePrompt={async (p) => {
+                      onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content })
+                    }}
+                    onCloneToCompany={async () => {}}
+                    companyFolderId={null}
+                  >
+                    <Button variant="ghost" size="sm" className="ml-2 px-2">Change</Button>
+                  </PromptPicker>
+                </Badge>
+              )}
+              {bulkGenerating && (
+                <div className="text-xs text-muted-foreground">Generating {bulkProgress.done}/{bulkProgress.total}…</div>
+              )}
+            <Button onClick={generateAllWithAI} disabled={bulkGenerating} className="rounded-xl">
+              <BrainCircuit className="mr-2 h-4 w-4" /> Generate
+            </Button>
+            <PromptPicker
+              treeLoader={loadPromptTree}
+              onUsePrompt={async (p) => {
+                // Attach snapshot locally; server should persist via campaign_prompts
+                onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content })
+              }}
+              onCloneToCompany={async (_p, _folderId) => {
+                // Integrate with Supabase server util in a real app
+              }}
+              companyFolderId={null}
+            >
+              <Button variant="outline" className="rounded-xl">Choose Prompt</Button>
+            </PromptPicker>
+            </div>
+          </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <Input
+                  value={(selected && (emails[selected.id]?.subject ?? tokenFill(subject, selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    const base = emails[selected.id] ?? { leadId: selected.id, subject: tokenFill(subject, selected), body: tokenFill(template, selected) };
+                    onEdit(selected.id, { ...base, subject: e.target.value });
+                  }}
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <Textarea
+                  value={(selected && (emails[selected.id]?.body ?? tokenFill(template, selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    const base = emails[selected.id] ?? { leadId: selected.id, subject: tokenFill(subject, selected), body: tokenFill(template, selected) };
+                    onEdit(selected.id, { ...base, body: e.target.value });
+                  }}
+                  className="min-h-[280px] rounded-2xl"
+                />
+              </div>
+              <Separator />
+              <div className="grid gap-2">
+                <Label>Prompt Preview</Label>
+                <Textarea
+                  value={(selected && (promptOverrides[selected.id] ?? buildPromptForLead(selected))) || ''}
+                  onChange={(e) => {
+                    if (!selected) return;
+                    onUpdatePrompt(selected.id, e.target.value);
+                  }}
+                  className="h-64 rounded-2xl text-xs overflow-auto resize-none"
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
+          )}
         </CardContent>
-        <CardFooter className="justify-between">
-          <div className="text-xs text-muted-foreground">Model: GPT-4 class · Avg ~180 tokens / email</div>
-          <Button onClick={onGenerate} className="rounded-xl">
-            <BrainCircuit className="mr-2 h-4 w-4" /> Generate for all leads
-          </Button>
-        </CardFooter>
       </Card>
 
-      <section className="lg:col-span-3 xl:col-span-4 space-y-3">
-        <div>
-          <div className="text-base font-semibold">Live Preview</div>
-          <div className="text-sm text-muted-foreground">AI stream or token-filled preview</div>
+      <LeadListPanel
+        leads={leads}
+        selectedLeadId={selectedLeadId}
+        onSelect={(id) => setSelectedLeadId(id)}
+        className="lg:col-span-3"
+      />
+    </div>
+  );
+}
+
+function LeadListPanel({
+  leads,
+  selectedLeadId,
+  onSelect,
+  className,
+}: {
+  leads: Lead[];
+  selectedLeadId: string | null;
+  onSelect: (id: string) => void;
+  className?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return leads;
+    return leads.filter((l) =>
+      [l.firstName, l.lastName, l.company, l.email]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [query, leads]);
+
+  const statusClass = (s: Lead["status"]) =>
+    s === "approved"
+      ? "bg-green-100 text-green-700 border-green-200"
+      : s === "generated"
+      ? "bg-amber-100 text-amber-800 border-amber-200"
+      : s === "enriched"
+      ? "bg-blue-100 text-blue-800 border-blue-200"
+      : s === "sent"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+      : s === "rejected"
+      ? "bg-red-100 text-red-800 border-red-200"
+      : "bg-gray-100 text-gray-700 border-gray-200";
+
+  return (
+    <Card className={cx("rounded-2xl overflow-hidden", className)}>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Leads</CardTitle>
+            <CardDescription>{leads.length} total</CardDescription>
+          </div>
         </div>
-        <div className="space-y-3">
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, company, email"
+            className="rounded-xl pl-9"
+          />
+        </div>
+        <ScrollArea className="h-[calc(100vh-320px)] pr-2">
           <div className="grid gap-2">
-            <Label>Company Name</Label>
-            <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="rounded-xl" placeholder="ClarinsMen" />
+            {filtered.map((l) => {
+              const selected = selectedLeadId === l.id;
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => onSelect(l.id)}
+                  className={cx(
+                    "w-full text-left rounded-xl border p-3 hover:bg-muted/50 transition-colors",
+                    selected && "bg-muted ring-1 ring-ring/50"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-9 w-9 flex-shrink-0">
+                      <AvatarFallback>
+                        {l.firstName?.[0]}
+                        {l.lastName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium truncate">
+                          {l.firstName} {l.lastName}
+                        </div>
+                        <Badge variant="outline" className={cx("rounded-xl text-[10px]", statusClass(l.status))}>
+                          {l.status}
+                        </Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {l.company}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {l.email}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  </div>
+                </button>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div className="text-sm text-muted-foreground py-8 text-center">
+                No leads match “{query}”.
+              </div>
+            )}
           </div>
-          <div className="grid gap-2">
-            <Label>Prompt</Label>
-            <Textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} className="min-h-24 rounded-2xl" placeholder="High-level goal, angle, or notes" />
-          </div>
-          <div className="grid gap-2">
-            <Label>LinkedIn Description</Label>
-            <Textarea value={linkedinDescription} onChange={(e) => setLinkedinDescription(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste the brand/recipient description from LinkedIn" />
-          </div>
-          <div className="grid gap-2">
-            <Label>Blog Posts</Label>
-            <Textarea value={blogPosts} onChange={(e) => setBlogPosts(e.target.value)} className="min-h-24 rounded-2xl" placeholder="Paste 1–3 relevant blog post excerpts" />
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handleAIGenerate} disabled={aiLoading} className="rounded-xl">
-              {aiLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
-                </>
-              ) : (
-                <>
-                  <BrainCircuit className="mr-2 h-4 w-4" /> Generate with AI
-                </>
-              )}
-            </Button>
-            <Button variant="outline" onClick={onGenerate} disabled={aiLoading} className="rounded-xl">
-              <Play className="mr-2 h-4 w-4" /> Token fill (local)
-            </Button>
-          </div>
-          {aiError && (
-            <div className="text-sm text-destructive">{aiError}</div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PreviewScreenMinimal({
+  leads,
+  emails,
+  subject,
+  template,
+  selectedLeadId,
+  setSelectedLeadId,
+}: {
+  leads: Lead[];
+  emails: Record<string, GeneratedEmail>;
+  subject: string;
+  template: string;
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
+}) {
+  const selected = useMemo(() => {
+    if (!leads.length) return null;
+    const id = selectedLeadId && leads.some(l => l.id === selectedLeadId) ? selectedLeadId : leads[0].id;
+    return leads.find(l => l.id === id) ?? null;
+  }, [leads, selectedLeadId]);
+
+  const previewFor = (l: Lead | null) => {
+    if (!l) return { subject: '', body: '' };
+    const ge = emails[l.id];
+    return {
+      subject: ge?.subject ?? tokenFill(subject, l),
+      body: ge?.body ?? tokenFill(template, l),
+    };
+  };
+
+  const preview = previewFor(selected);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <LeadListPanel
+        leads={leads}
+        selectedLeadId={selectedLeadId}
+        onSelect={(id) => setSelectedLeadId(id)}
+        className="lg:col-span-1"
+      />
+
+      <Card className="rounded-2xl lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Preview</CardTitle>
+          <CardDescription>Output of your generated prompt</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <ScrollArea className="h-[360px] rounded-2xl border">
+                  <pre className="whitespace-pre-wrap break-words p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                </ScrollArea>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
           )}
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap rounded-2xl border p-3 bg-muted/30">{aiText || preview || "(Preview will appear here)"}</pre>
-          </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -916,7 +1503,7 @@ function ReviewScreen({
                               <DialogTitle>{ge?.subject}</DialogTitle>
                               <DialogDescription>To: {l.email}</DialogDescription>
                             </DialogHeader>
-                            <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
+                            <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap break-words">
                               {ge?.body}
                             </div>
                           </DialogContent>
@@ -1009,14 +1596,18 @@ function SendScreen({
   schedule: Date | null;
   setSchedule: (d: Date | null) => void;
 }) {
+  const [showBatchCard, setShowBatchCard] = useState(true);
+  const [showComplianceCard, setShowComplianceCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Batch Sending</CardTitle>
-          <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      {showBatchCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Batch Sending</CardTitle>
+            <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowBatchCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="grid gap-2">
               <Label>Batch size</Label>
@@ -1086,15 +1677,18 @@ function SendScreen({
             <Label>Progress</Label>
             <Progress value={progress} className="h-2" />
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>Compliance</CardTitle>
-          <CardDescription>Deliverability & opt-out</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      {showComplianceCard && (
+        <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Compliance</CardTitle>
+            <CardDescription>Deliverability & opt-out</CardDescription>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowComplianceCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="overflow-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl border p-3">
             <div>
               <div className="font-medium">Include unsubscribe link</div>
@@ -1111,8 +1705,9 @@ function SendScreen({
             <Input placeholder="mailer.salesmatter.co" className="rounded-xl" />
             <div className="text-xs text-muted-foreground">Remember to set up SPF, DKIM, DMARC.</div>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1167,6 +1762,17 @@ function AnalyticsScreen() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="rounded-2xl lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Campaign Analytics</CardTitle>
+          <CardDescription>Performance metrics and insights</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center text-muted-foreground py-8">
+            Analytics dashboard coming soon
+          </div>
+        </CardContent>
+      </Card>
       <Card className="rounded-2xl lg:col-span-2">
         <CardHeader>
           <CardTitle>Campaign Performance</CardTitle>
@@ -1249,14 +1855,19 @@ function AnalyticsScreen() {
 }
 
 function SettingsScreen() {
+  const [showSmtpCard, setShowSmtpCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>SMTP & Provider</CardTitle>
-          <CardDescription>Credentials are stored securely.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {showSmtpCard && (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div>
+              <CardTitle>SMTP & Provider</CardTitle>
+              <CardDescription>Credentials are stored securely.</CardDescription>
+            </div>
+            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowSmtpCard(false)}>Delete</Button>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
           <div className="grid gap-2">
             <Label>Provider</Label>
             <Select defaultValue="sendgrid">
@@ -1286,8 +1897,9 @@ function SettingsScreen() {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="rounded-2xl">
         <CardHeader>
@@ -1296,7 +1908,7 @@ function SettingsScreen() {
         </CardHeader>
         <CardContent className="space-y-3">
           {["Neo Sekaleli", "Onalerona Maine", "Khutso Moleleki", "Motheo Modisaesi", "Thato Seekoei"].map((name, i) => (
-            <div key={i} className="flex items-center justify-between rounded-xl border p-2">
+            <div key={i} className="flex items-center justify-between rounded-xl border p-2 bg-muted/20">
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8"><AvatarFallback>{name.split(" ").map(n=>n[0]).join("")}</AvatarFallback></Avatar>
                 <div>
@@ -1327,6 +1939,13 @@ function SettingsScreen() {
 export default function SalesAutomationUI() {
   const [section, setSection] = useState<string>("import");
   const [step, setStep] = useState<number>(0);
+  // Lead lists (folders) and active list selection
+  const defaultListId = "default";
+  const [leadLists, setLeadLists] = useState<LeadList[]>([
+    { id: defaultListId, name: "Sample Leads", leads: initialLeads },
+  ]);
+  const [currentListId, setCurrentListId] = useState<string>(defaultListId);
+  // Local working set mirrors the active list
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   // LinkedIn enrichment flow replaces generic enrichment toggles
   const [template, setTemplate] = useState<string>(
@@ -1338,6 +1957,10 @@ export default function SalesAutomationUI() {
   const [progress, setProgress] = useState(0);
   const [batchSize, setBatchSize] = useState(20);
   const [schedule, setSchedule] = useState<Date | null>(null);
+  const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [attachedPrompt, setAttachedPrompt] = useState<null | { id: string; name: string; version: number; content: string }>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   // Preview using the first lead
   const preview = useMemo(() => {
@@ -1347,16 +1970,115 @@ export default function SalesAutomationUI() {
   }, [subject, template, leads]);
 
   const onImportCSV = async (file: File) => {
-    // Demo: append a mock row after a brief delay
-    const text = await file.text();
-    console.log("Imported CSV sample:", text.slice(0, 80));
-    const id = String(Date.now());
-    setLeads((prev) => [
-      ...prev,
-      { id, firstName: "Taylor", lastName: "Nkosi", company: "Example Pty", email: "taylor@example.com", title: "Ops Manager", website: "https://example.com", status: "new" },
-    ]);
-    // Navigate to LinkedIn enrichment after import
-    setSection("enrich");
+    try {
+      // 1) Parse CSV on the client
+      const parsed = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
+        Papa.parse<Record<string, unknown>>(file, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h: string) => String(h || "").trim(),
+          complete: (res) => resolve(res),
+          error: (err) => reject(err),
+        });
+      });
+
+      const rows = (parsed.data || []).filter((r) => r && Object.keys(r).length > 0);
+      const columns = (parsed.meta.fields || []).filter(Boolean) as string[];
+
+      if (!rows.length || !columns.length) {
+        console.warn("CSV appears empty or has no headers");
+        return;
+      }
+
+      // 2) Ask the backend LLM to map headers and provide sample normalization
+      let headerMapping: Record<string, string> | null = null;
+      let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
+      
+      console.log("Attempting to call /api/map-csv with:", { columns, rowCount: rows.length });
+      
+      try {
+        const requestBody = { columns, rows: rows.slice(0, 25) };
+        console.log("Request body:", JSON.stringify(requestBody, null, 2));
+        
+        const resp = await fetch("/api/map-csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        
+        console.log("Response status:", resp.status, resp.statusText);
+        
+        if (resp.ok) {
+          const data = await resp.json();
+          console.log("Response data:", data);
+          headerMapping = data?.headerMapping ?? null;
+          rules = data?.rules;
+        } else {
+          const errorText = await resp.text();
+          console.error("API response error:", resp.status, errorText);
+          throw new Error(`API returned ${resp.status}: ${errorText}`);
+        }
+      } catch (e) {
+        console.error("/api/map-csv request failed; using heuristic mapping", e);
+        // Check if it's a network error specifically
+        if (e instanceof TypeError && e.message === "Failed to fetch") {
+          console.error("Network error: This could be due to:");
+          console.error("1. Development server not running");
+          console.error("2. CORS issues");
+          console.error("3. Network connectivity problems");
+          console.error("4. Browser blocking the request");
+        }
+      }
+
+      if (!headerMapping) {
+        console.warn("Falling back to heuristic header mapping");
+        headerMapping = guessHeaderMapping(columns);
+      }
+
+      // 3) Apply the mapping to all rows locally
+      const mapped: Lead[] = rows
+        .map((r: Record<string, unknown>, idx: number) => {
+          const normalized = applyMapping(r, headerMapping!, rules);
+          const hasAny = Boolean(
+            normalized.email ||
+            normalized.linkedin ||
+            normalized.company ||
+            normalized.firstName ||
+            normalized.lastName
+          );
+          if (!hasAny) return null;
+          return {
+            id: `${Date.now()}-${idx}`,
+            firstName: normalized.firstName || "",
+            lastName: normalized.lastName || "",
+            company: normalized.company || "",
+            email: (normalized.email || "").toLowerCase(),
+            title: normalized.title || "",
+            website: normalized.website || undefined,
+            linkedin: normalized.linkedin || undefined,
+            status: "new" as const,
+          };
+        })
+        .filter(Boolean) as Lead[];
+
+      if (!mapped.length) {
+        console.warn("No valid leads produced from CSV");
+        return;
+      }
+
+      // Create a new lead list (folder) for each uploaded file
+      const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
+      const newId = `${Date.now()}`;
+      const newList: LeadList = { id: newId, name: base, leads: mapped };
+      setLeadLists((prev) => [...prev, newList]);
+      setCurrentListId(newId);
+      setLeads(mapped);
+      setSection("enrich");
+    } catch (err) {
+      console.error("Import failed", err);
+      // You could add a toast notification here or set an error state
+      alert("CSV import failed. Please check the console for details and try again.");
+    }
   };
 
   const onConnectCRM = (provider: string) => {
@@ -1400,6 +2122,78 @@ export default function SalesAutomationUI() {
 
   const approvedCount = leads.filter((l) => l.status === "approved").length;
 
+  // Keep the current list in sync with local leads state
+  useEffect(() => {
+    setLeadLists((prev) => {
+      let changed = false;
+      const next = prev.map((lst) => {
+        if (lst.id !== currentListId) return lst;
+        if (lst.leads === leads) return lst;
+        changed = true;
+        return { ...lst, leads };
+      });
+      return changed ? next : prev;
+    });
+  }, [leads, currentListId]);
+
+  // When switching lists, load its leads into local state
+  // Only react to list ID changes to avoid sync loops with the writer effect above.
+  useEffect(() => {
+    const selected = leadLists.find((l) => l.id === currentListId);
+    if (selected) {
+      setLeads(selected.leads);
+    }
+  }, [currentListId]);
+
+  // Keep a sensible selection for the minimal preview screen
+  useEffect(() => {
+    if (!leads.length) {
+      setSelectedLeadId(null);
+    } else if (!selectedLeadId || !leads.some(l => l.id === selectedLeadId)) {
+      setSelectedLeadId(leads[0].id);
+    }
+  }, [leads, selectedLeadId]);
+
+  // Sidebar list actions
+  const newEmptyList = () => {
+    const newId = `${Date.now()}`;
+    const list: LeadList = { id: newId, name: `List ${leadLists.length + 1}`, leads: [] };
+    setLeadLists((prev) => [...prev, list]);
+    setCurrentListId(newId);
+    setLeads([]);
+  };
+  const selectList = (id: string) => setCurrentListId(id);
+  const removeListById = (id: string) => {
+    setLeadLists((prev) => {
+      const filtered = prev.filter((l) => l.id !== id);
+      if (id === currentListId) {
+        const nextId = filtered[0]?.id || "";
+        setCurrentListId(nextId);
+        const nextLeads = filtered.find((l) => l.id === nextId)?.leads || [];
+        setLeads(nextLeads);
+      }
+      return filtered;
+    });
+  };
+
+  // Lead removal helpers for ImportScreen
+  const removeLead = (leadId: string) => {
+    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    // Also remove any generated email entry tied to that lead
+    setEmails((prev) => {
+      const { [leadId]: _, ...rest } = prev;
+      return rest;
+    });
+  };
+  const clearLeads = () => {
+    setLeads([]);
+    setEmails({});
+  };
+
+  const renameList = (id: string, name: string) => {
+    setLeadLists((prev) => prev.map((list) => (list.id === id ? { ...list, name } : list)));
+  };
+
   // Simulate sending with batches
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -1434,33 +2228,38 @@ export default function SalesAutomationUI() {
     const map: Record<number, string> = { 0: "import", 1: "enrich", 2: "generate", 3: "review", 4: "send", 5: "analytics" };
     setSection(map[step] || "import");
   }, [step]);
-
   useEffect(() => {
-    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, review: 3, send: 4, analytics: 5, settings: 5 };
+    const map: Record<string, number> = { import: 0, enrich: 1, generate: 2, preview: 2, prompts: 2, review: 3, send: 4, analytics: 5, settings: 5 };
     setStep(map[section] ?? 0);
   }, [section]);
 
-  return (
+return (
+  <WorkspaceProvider>
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
       <div className="flex">
-        <Sidebar current={section} onChange={setSection} />
+        <Sidebar
+          current={section}
+          onChange={setSection}
+          lists={leadLists}
+          currentListId={currentListId}
+          onSelectList={selectList}
+          onNewList={newEmptyList}
+          onRemoveList={removeListById}
+          onRenameList={renameList}
+        />
         <div className="flex-1">
           <Topbar />
-          <main className="mx-auto max-w-[1440px] xl:max-w-[1600px] px-4 py-6 space-y-4">
-            <div className="flex items-center justify-between gap-2">
-              <Stepper step={step} onStep={setStep} />
-              <div className="hidden sm:flex items-center gap-2">
-                <Button variant="outline" size="sm" className="rounded-xl">
-                  <ChevronRight className="mr-2 h-4 w-4" /> Quick tour
-                </Button>
-                <Button size="sm" className="rounded-xl">
-                  <ArrowRight className="mr-2 h-4 w-4" /> Next step
-                </Button>
-              </div>
-            </div>
+          <main className="p-4 space-y-4">
+            {section !== 'preview' && <Stepper step={step} onStep={setStep} />}
 
             {section === "import" && (
-              <ImportScreen leads={leads} onImportCSV={onImportCSV} onConnectCRM={onConnectCRM} />
+              <ImportScreen
+                leads={leads}
+                onImportCSV={onImportCSV}
+                onConnectCRM={onConnectCRM}
+                onRemoveLead={removeLead}
+                onClearLeads={clearLeads}
+              />
             )}
 
             {section === "enrich" && (
@@ -1469,13 +2268,49 @@ export default function SalesAutomationUI() {
 
             {section === "generate" && (
               <GenerateScreen
-                template={template}
-                setTemplate={setTemplate}
+                leads={leads}
+                emails={emails}
                 subject={subject}
-                setSubject={setSubject}
-                preview={preview}
-                onGenerate={runGeneration}
-                lead={leads[0] ?? null}
+                template={template}
+                selectedLeadId={selectedLeadId}
+                setSelectedLeadId={setSelectedLeadId}
+                onEdit={handleEdit}
+                onMarkGenerated={() => setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })))}
+                promptOverrides={promptOverrides}
+                onUpdatePrompt={(id, value) => setPromptOverrides((prev) => ({ ...prev, [id]: value }))}
+                attachedPrompt={attachedPrompt}
+                onAttachPrompt={(p) => {
+                  setAttachedPrompt(p);
+                  setTemplate(p.content);
+                }}
+              />
+            )}
+
+            {section === 'preview' && (
+              <PreviewScreenMinimal
+                leads={leads}
+                emails={emails}
+                subject={subject}
+                template={template}
+                selectedLeadId={selectedLeadId}
+                setSelectedLeadId={setSelectedLeadId}
+              />
+            )}
+
+            {section === "prompts" && (
+              <PromptsScreen
+                subject={subject}
+                template={template}
+                onUpdateSubject={setSubject}
+                onUpdateTemplate={setTemplate}
+                attachedPrompt={attachedPrompt}
+                onAttachPrompt={(p) => {
+                  setAttachedPrompt(p);
+                  setTemplate(p.content);
+                }}
+                onDetachPrompt={() => setAttachedPrompt(null)}
+                treeLoader={loadPromptTree}
+                previewLead={leads[0] ?? null}
               />
             )}
 
@@ -1501,25 +2336,39 @@ export default function SalesAutomationUI() {
 
             {section === "settings" && <SettingsScreen />}
 
-            <Separator className="my-6" />
-
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>How this UI maps to your requirements</CardTitle>
-                <CardDescription>Import → Enrich → Generate → Review → Send → Analytics</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground grid gap-2">
-                <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
-                <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
-                <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
-                <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
-                <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
-                <div className="flex items-center gap-2"><LineChart className="h-4 w-4" /> KPIs & charts for outcomes</div>
-              </CardContent>
-            </Card>
+            {false && (
+              <>
+                <Separator className="my-6" />
+                <Card className="rounded-2xl">
+                  <CardHeader>
+                    <CardTitle>How this UI maps to your requirements</CardTitle>
+                    <CardDescription>Import → Enrich → Generate → Review → Send → Analytics</CardDescription>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground grid gap-2">
+                    <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
+                    <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
+                    <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
+                    <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
+                    <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
+                    <div className="flex items-center gap-2"><LineChart className="h-4 w-4" /> KPIs & charts for outcomes</div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </main>
         </div>
       </div>
     </div>
-  );
+  </WorkspaceProvider>
+);
 }
+  // Load prompt tree via Supabase using RLS policies
+  const loadPromptTree = async () => {
+    const supabase = createSupabaseClient();
+    try {
+      return await listPromptTree(supabase);
+    } catch (e) {
+      console.warn('Failed to load prompts', e);
+      return { folders: [], prompts: [] };
+    }
+  };
