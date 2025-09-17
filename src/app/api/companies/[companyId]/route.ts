@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getUserMetadata, belongsToCompany, hasPermission } from '@/lib/auth/permissions';
+import { belongsToCompany, hasPermission } from '@/lib/auth/permissions';
 import { Permission } from '@/lib/types/auth';
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ companyId: string }> }
+  { params }: { params: { companyId: string } }
 ) {
   try {
     const { userId } = await auth();
-    const { companyId } = await params;
+    const { companyId } = params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -76,11 +76,11 @@ export async function GET(
 
 export async function PUT(
   req: NextRequest,
-  { params }: { params: Promise<{ companyId: string }> }
+  { params }: { params: { companyId: string } }
 ) {
   try {
     const { userId } = await auth();
-    const { companyId } = await params;
+    const { companyId } = params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -98,7 +98,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const updateData = await req.json();
+    const updateData = (await req.json()) as Record<string, unknown>;
 
     // Here you would update the company in your database
     // For now, return success response

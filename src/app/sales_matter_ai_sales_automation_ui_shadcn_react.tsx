@@ -1,7 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
-import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -15,12 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -45,24 +38,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
 import { WorkspaceProvider } from "@/lib/context/workspace-context";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { PromptPicker } from "@/components/prompts/PromptPicker";
-import type { Prompt } from "@/types/prompting";
+import type { Prompt, Folder } from "@/types/prompting";
 import { listPromptTree } from "@/lib/promptTemplates";
 import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import {
   AlignLeft,
-  ArrowRight,
   BadgeCheck,
   BrainCircuit,
   CalendarDays,
   Check,
-  ChevronDown,
   ChevronRight,
   CloudUpload,
   Database,
@@ -71,17 +62,13 @@ import {
   Filter,
   Inbox,
   LineChart,
-  Loader2,
   Mail,
   MailCheck,
-  MailQuestion,
   Play,
   Search,
   Settings,
-  ShieldCheck,
   StopCircle,
   Upload,
-  Users2,
   Sun,
   Moon,
   Linkedin,
@@ -128,13 +115,6 @@ interface LeadList {
   name: string;
   leads: Lead[];
 }
-
-type EnrichOptions = {
-  linkedin: boolean;
-  company: boolean;
-  news: boolean;
-  tech: boolean;
-};
 
 const initialLeads: Lead[] = [
   {
@@ -239,7 +219,7 @@ const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolea
 
 // Apply LLM-provided mapping rules to a CSV row
 function applyMapping(
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   headerMapping: Record<string, string>,
   rules?: { splitFullName?: { column: string; firstNameFirst?: boolean } }
 ) {
@@ -825,14 +805,14 @@ function EnrichScreen({
     )}`;
   const [showLinkedInCard, setShowLinkedInCard] = useState(true);
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full">
       {showLinkedInCard && (
-        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
+        <Card className="rounded-2xl lg:col-span-3 flex flex-col max-h-[calc(100vh-220px)]">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>LinkedIn Enrichment</CardTitle>
               <CardDescription>
-                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead&apos;s LinkedIn profile.
               </CardDescription>
             </div>
             <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowLinkedInCard(false)}>Delete</Button>
@@ -931,20 +911,149 @@ function EnrichScreen({
         </Card>
       )}
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>How matching works</CardTitle>
-          <CardDescription>Human-in-the-loop enrichment</CardDescription>
+    </div>
+  );
+}
+
+function PromptsScreen({
+  subject,
+  template,
+  onUpdateSubject,
+  onUpdateTemplate,
+  attachedPrompt,
+  onAttachPrompt,
+  onDetachPrompt,
+  treeLoader,
+  previewLead,
+}: {
+  subject: string;
+  template: string;
+  onUpdateSubject: (value: string) => void;
+  onUpdateTemplate: (value: string) => void;
+  attachedPrompt: null | { id: string; name: string; version: number; content: string };
+  onAttachPrompt: (p: { id: string; name: string; version: number; content: string }) => void;
+  onDetachPrompt: () => void;
+  treeLoader: () => Promise<{ folders: Folder[]; prompts: Prompt[] }>;
+  previewLead: Lead | null;
+}) {
+  const tokens: { token: string; label: string }[] = [
+    { token: "{{firstName}}", label: "Lead first name" },
+    { token: "{{lastName}}", label: "Lead last name" },
+    { token: "{{company}}", label: "Company name" },
+    { token: "{{title}}", label: "Role or title" },
+    { token: "{{email}}", label: "Email address" },
+    { token: "{{linkedin}}", label: "LinkedIn URL" },
+  ];
+
+  const sample = useMemo(() => {
+    if (!previewLead) return null;
+    return {
+      subject: tokenFill(subject, previewLead),
+      body: tokenFill(template, previewLead),
+    };
+  }, [previewLead, subject, template]);
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <Card className="rounded-2xl xl:col-span-2">
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle>Base Prompt Template</CardTitle>
+            <CardDescription>Edit the subject and body templates used when generating emails.</CardDescription>
+          </div>
+          {attachedPrompt && (
+            <Badge variant="secondary" className="rounded-xl">Using {attachedPrompt.name} · v{attachedPrompt.version}</Badge>
+          )}
         </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            We generate search links using the uploaded CSV fields: first name, last name, company name, and company URL. Use these to find the correct LinkedIn profile and paste the URL to attach it to the lead.
-          </p>
-          <p>
-            This demo does not call LinkedIn APIs. In production, integrate a compliant people search provider or your internal enrichment service.
-          </p>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <Label htmlFor="prompt-subject">Subject template</Label>
+            <Input
+              id="prompt-subject"
+              value={subject}
+              onChange={(e) => onUpdateSubject(e.target.value)}
+              className="rounded-xl"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="prompt-body">Email body template</Label>
+            <Textarea
+              id="prompt-body"
+              value={template}
+              onChange={(e) => onUpdateTemplate(e.target.value)}
+              className="min-h-[360px] rounded-2xl"
+            />
+          </div>
         </CardContent>
       </Card>
+
+      <div className="space-y-4">
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>Prompt Library</CardTitle>
+            <CardDescription>Browse reusable prompt templates and attach one to this workflow.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {attachedPrompt ? (
+              <div className="rounded-2xl border p-3 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium leading-tight">{attachedPrompt.name}</div>
+                    <div className="text-xs text-muted-foreground">v{attachedPrompt.version}</div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="rounded-xl" onClick={onDetachPrompt}>
+                    Remove
+                  </Button>
+                </div>
+                <ScrollArea className="h-32">
+                  <pre className="text-xs whitespace-pre-wrap font-mono text-muted-foreground">
+                    {attachedPrompt.content}
+                  </pre>
+                </ScrollArea>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">No prompt attached. Choose one below to auto-fill the template.</div>
+            )}
+            <PromptPicker
+              treeLoader={treeLoader}
+              onUsePrompt={async (p) => {
+                onAttachPrompt({ id: p.id, name: p.name, version: p.version, content: p.content });
+              }}
+              onCloneToCompany={async () => {}}
+              companyFolderId={null}
+            >
+              <Button className="rounded-xl w-full" variant="outline">Browse prompt library</Button>
+            </PromptPicker>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl">
+          <CardHeader>
+            <CardTitle>Token Reference & Preview</CardTitle>
+            <CardDescription>Available dynamic fields and a sample fill using your first lead.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              {tokens.map((t) => (
+                <div key={t.token} className="rounded-xl border px-3 py-2">
+                  <div className="font-mono text-xs">{t.token}</div>
+                  <div className="text-xs text-muted-foreground">{t.label}</div>
+                </div>
+              ))}
+            </div>
+            {sample ? (
+              <div className="space-y-2">
+                <Label>Sample subject</Label>
+                <Input value={sample.subject} readOnly className="rounded-xl" />
+                <Label>Sample body</Label>
+                <Textarea value={sample.body} readOnly className="h-48 rounded-2xl text-sm" />
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Add a lead to preview how tokens resolve.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -1863,13 +1972,13 @@ export default function SalesAutomationUI() {
   const onImportCSV = async (file: File) => {
     try {
       // 1) Parse CSV on the client
-      const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
-        Papa.parse<Record<string, any>>(file, {
+      const parsed = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
+        Papa.parse<Record<string, unknown>>(file, {
           header: true,
           skipEmptyLines: true,
           transformHeader: (h: string) => String(h || "").trim(),
-          complete: (res: Papa.ParseResult<Record<string, any>>) => resolve(res),
-          error: (err: any) => reject(err),
+          complete: (res) => resolve(res),
+          error: (err) => reject(err),
         });
       });
 
@@ -1882,19 +1991,43 @@ export default function SalesAutomationUI() {
       }
 
       // 2) Ask the backend LLM to map headers and provide sample normalization
-      const resp = await fetch("/api/map-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
-      });
-
       let headerMapping: Record<string, string> | null = null;
       let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
-
-      if (resp.ok) {
-        const data = await resp.json();
-        headerMapping = data?.headerMapping ?? null;
-        rules = data?.rules;
+      
+      console.log("Attempting to call /api/map-csv with:", { columns, rowCount: rows.length });
+      
+      try {
+        const requestBody = { columns, rows: rows.slice(0, 25) };
+        console.log("Request body:", JSON.stringify(requestBody, null, 2));
+        
+        const resp = await fetch("/api/map-csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+        
+        console.log("Response status:", resp.status, resp.statusText);
+        
+        if (resp.ok) {
+          const data = await resp.json();
+          console.log("Response data:", data);
+          headerMapping = data?.headerMapping ?? null;
+          rules = data?.rules;
+        } else {
+          const errorText = await resp.text();
+          console.error("API response error:", resp.status, errorText);
+          throw new Error(`API returned ${resp.status}: ${errorText}`);
+        }
+      } catch (e) {
+        console.error("/api/map-csv request failed; using heuristic mapping", e);
+        // Check if it's a network error specifically
+        if (e instanceof TypeError && e.message === "Failed to fetch") {
+          console.error("Network error: This could be due to:");
+          console.error("1. Development server not running");
+          console.error("2. CORS issues");
+          console.error("3. Network connectivity problems");
+          console.error("4. Browser blocking the request");
+        }
       }
 
       if (!headerMapping) {
@@ -1904,7 +2037,7 @@ export default function SalesAutomationUI() {
 
       // 3) Apply the mapping to all rows locally
       const mapped: Lead[] = rows
-        .map((r: Record<string, any>, idx: number) => {
+        .map((r: Record<string, unknown>, idx: number) => {
           const normalized = applyMapping(r, headerMapping!, rules);
           const hasAny = Boolean(
             normalized.email ||
@@ -1943,6 +2076,8 @@ export default function SalesAutomationUI() {
       setSection("enrich");
     } catch (err) {
       console.error("Import failed", err);
+      // You could add a toast notification here or set an error state
+      alert("CSV import failed. Please check the console for details and try again.");
     }
   };
 
@@ -2159,6 +2294,23 @@ return (
                 template={template}
                 selectedLeadId={selectedLeadId}
                 setSelectedLeadId={setSelectedLeadId}
+              />
+            )}
+
+            {section === "prompts" && (
+              <PromptsScreen
+                subject={subject}
+                template={template}
+                onUpdateSubject={setSubject}
+                onUpdateTemplate={setTemplate}
+                attachedPrompt={attachedPrompt}
+                onAttachPrompt={(p) => {
+                  setAttachedPrompt(p);
+                  setTemplate(p.content);
+                }}
+                onDetachPrompt={() => setAttachedPrompt(null)}
+                treeLoader={loadPromptTree}
+                previewLead={leads[0] ?? null}
               />
             )}
 

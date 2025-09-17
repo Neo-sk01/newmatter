@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UserRole } from '@/lib/types/auth';
-import { Building2, Users, Briefcase } from 'lucide-react';
+import { Building2, Users } from 'lucide-react';
 
 export default function OnboardingPage() {
   const { user } = useUser();
@@ -76,7 +76,7 @@ export default function OnboardingPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Welcome to SalesMatter AI</CardTitle>
           <CardDescription>
-            Let's set up your company profile to get started with AI-powered lead generation
+            Let&apos;s set up your company profile to get started with AI-powered lead generation
           </CardDescription>
         </CardHeader>
         <CardContent>

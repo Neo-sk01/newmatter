@@ -26,6 +26,8 @@ const CanonicalField = z.enum([
   "ignore",
 ]);
 
+type CanonicalFieldValue = z.infer<typeof CanonicalField>;
+
 // Primary expected shape: original column name -> canonical field
 const HeaderMappingForward = z.record(z.string(), CanonicalField);
 
@@ -99,6 +101,41 @@ Guidelines:
       `Sample rows (values as strings):\n${JSON.stringify(sampleRows, null, 2)}\n\n` +
       `Return a JSON object with:\n- headerMapping: map original column => one of [firstName,lastName,company,email,title,website,linkedin,ignore]\n- rules.splitFullName if applicable\n- sampleLeads: 3-10 normalized examples derived strictly from provided sample rows\n- notes: brief rationale if relevant.`;
 
+    // Heuristic fallback when OpenAI is not configured
+    const noOpenAI = !process.env.OPENAI_API_KEY;
+    if (noOpenAI) {
+      const headerMapping = (() => {
+        const out: Record<string, CanonicalFieldValue> = {};
+        const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+        const candidates: Record<CanonicalFieldValue, string[]> = {
+          firstName: ["firstname", "first", "givenname", "fname"],
+          lastName: ["lastname", "last", "surname", "lname"],
+          company: ["company", "organisation", "organization", "org", "employer"],
+          email: ["email", "e-mail", "mail"],
+          title: ["title", "role", "position", "jobtitle"],
+          website: ["website", "site", "url", "domain"],
+          linkedin: ["linkedin", "linkedinurl", "linkedinprofile", "li"],
+          ignore: [],
+        };
+
+        for (const column of columns) {
+          const normalizedColumn = norm(column);
+          let matched: CanonicalFieldValue = "ignore";
+          for (const field of Object.keys(candidates) as CanonicalFieldValue[]) {
+            if (field === "ignore") continue;
+            const synonyms = candidates[field];
+            if (synonyms.some((synonym) => normalizedColumn.includes(synonym))) {
+              matched = field;
+              break;
+            }
+          }
+          out[column] = matched;
+        }
+        return out;
+      })();
+      return Response.json({ headerMapping, rules: {}, sampleLeads: [], notes: "Heuristic fallback (no OpenAI)" });
+    }
+
     const { object } = await generateObject({
       model: openai("gpt-4o-mini"),
       system,
@@ -108,9 +145,12 @@ Guidelines:
       maxOutputTokens: 800,
     });
 
+    type ResponsePayload = z.infer<typeof ResponseSchema>;
+    const structured = object as ResponsePayload;
+
     // Normalize headerMapping to: original header -> canonical string
     const normalize = (
-      mapping: unknown,
+      mapping: ResponsePayload["headerMapping"],
       cols: string[]
     ): Record<string, z.infer<typeof CanonicalField>> => {
       const out: Record<string, z.infer<typeof CanonicalField>> = {};
@@ -121,24 +161,24 @@ Guidelines:
       };
 
       // Forward shape
-      if (HeaderMappingForward.safeParse(mapping).success) {
-        const m = mapping as z.infer<typeof HeaderMappingForward>;
-        for (const [col, target] of Object.entries(m)) setIfCol(col, target);
+      const forward = HeaderMappingForward.safeParse(mapping);
+      if (forward.success) {
+        for (const [col, target] of Object.entries(forward.data)) setIfCol(col, target);
         return out;
       }
       // Reverse shape
-      if (HeaderMappingReverse.safeParse(mapping).success) {
-        const m = mapping as z.infer<typeof HeaderMappingReverse>;
-        for (const [target, colsOrList] of Object.entries(m)) {
-          const list = Array.isArray(colsOrList) ? colsOrList : [colsOrList as string];
-          for (const col of list) setIfCol(col, target as z.infer<typeof CanonicalField>);
+      const reverse = HeaderMappingReverse.safeParse(mapping);
+      if (reverse.success) {
+        for (const [target, colsOrList] of Object.entries(reverse.data)) {
+          const list = Array.isArray(colsOrList) ? colsOrList : [colsOrList];
+          for (const col of list) setIfCol(col, target);
         }
         return out;
       }
       // Pairs shape
-      if (HeaderMappingPairs.safeParse(mapping).success) {
-        const m = mapping as z.infer<typeof HeaderMappingPairs>;
-        for (const { column, mapTo } of m) setIfCol(column, mapTo);
+      const pairs = HeaderMappingPairs.safeParse(mapping);
+      if (pairs.success) {
+        for (const { column, mapTo } of pairs.data) setIfCol(column, mapTo);
         return out;
       }
       // Fallback: empty mapping
@@ -146,8 +186,8 @@ Guidelines:
     };
 
     const normalized = {
-      ...object,
-      headerMapping: normalize((object as any)?.headerMapping, columns),
+      ...structured,
+      headerMapping: normalize(structured.headerMapping, columns),
     };
 
     return Response.json(normalized);

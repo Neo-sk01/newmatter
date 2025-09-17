@@ -1,6 +1,56 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+type CampaignPromptRow = {
+  id: string;
+  prompt_version_id: string;
+  delivery_channel: string | null;
+  ab_group: string | null;
+  status: string | null;
+};
+
+type CampaignRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  company_id: string;
+  leadlist_id: string | null;
+  campaign_prompts: CampaignPromptRow[] | null;
+};
+
+type PromptSelectionPayload = {
+  promptId: string;
+  version?: number;
+};
+
+type CampaignResponse = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  promptSelections: PromptSelectionPayload[];
+};
+
+const mapPromptSelections = (prompts: CampaignPromptRow[] | null | undefined): PromptSelectionPayload[] =>
+  (prompts ?? []).map((prompt) => ({
+    promptId: prompt.prompt_version_id,
+    version: 1,
+  }));
+
+const toCampaignResponse = (campaign: CampaignRow): CampaignResponse => ({
+  id: campaign.id,
+  name: campaign.name,
+  createdAt: campaign.created_at,
+  updatedAt: campaign.updated_at,
+  promptSelections: mapPromptSelections(campaign.campaign_prompts),
+});
+
+const errorResponse = (error: unknown, status = 500) => {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+  return NextResponse.json({ ok: false, error: message }, { status });
+};
+
 // GET /api/campaigns -> list campaigns with prompt selections
 export async function GET() {
   try {
@@ -20,7 +70,7 @@ export async function GET() {
     const mockCompanyId = '00000000-0000-0000-0000-000000000001';
     
     // Get campaigns for the company
-    const { data: campaigns, error: campaignsError } = await supabase
+    const { data: campaignsData, error: campaignsError } = await supabase
       .from('campaigns')
       .select(`
         *,
@@ -35,23 +85,16 @@ export async function GET() {
       .eq('company_id', mockCompanyId)
       .order('created_at', { ascending: false });
 
+    const campaigns = (campaignsData as CampaignRow[] | null) ?? [];
+
     if (campaignsError) throw campaignsError;
 
     // Transform to match expected format
-    const transformedCampaigns = (campaigns || []).map((campaign: any) => ({
-      id: campaign.id,
-      name: campaign.name,
-      createdAt: campaign.created_at,
-      updatedAt: campaign.updated_at,
-      promptSelections: (campaign.campaign_prompts || []).map((cp: any) => ({
-        promptId: cp.prompt_version_id, // Note: this maps to version ID, not template ID
-        version: 1 // We'll need to get actual version from prompt_versions table
-      }))
-    }));
+    const transformedCampaigns = campaigns.map(toCampaignResponse);
 
     return NextResponse.json({ ok: true, data: transformedCampaigns });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }
 
@@ -59,8 +102,13 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
-    const body = await req.json();
-    const { name, promptSelections = [], companyId, leadlistId } = body ?? {};
+    const body = (await req.json()) as Partial<{
+      name: string;
+      promptSelections: unknown;
+      companyId: string;
+      leadlistId: string;
+    }>;
+    const { name, promptSelections = [], companyId, leadlistId } = body;
     
     if (!name) {
       return NextResponse.json({ ok: false, error: 'name is required' }, { status: 400 });
@@ -71,7 +119,7 @@ export async function POST(req: Request) {
     const finalLeadlistId = leadlistId || '00000000-0000-0000-0000-000000000002';
 
     // Create campaign
-    const { data: campaign, error: campaignError } = await supabase
+    const { data: campaignData, error: campaignError } = await supabase
       .from('campaigns')
       .insert({
         company_id: finalCompanyId,
@@ -84,36 +132,54 @@ export async function POST(req: Request) {
       .select('*')
       .single();
 
+    const campaign = campaignData as CampaignRow | null;
+
     if (campaignError) throw campaignError;
+    if (!campaign) {
+      return errorResponse('Failed to create campaign', 500);
+    }
 
     // Create campaign_prompts entries if promptSelections provided
-    if (promptSelections.length > 0) {
-      const campaignPrompts = promptSelections.map((selection: any) => ({
-        campaign_id: campaign.id,
-        prompt_version_id: selection.promptId, // Assuming this is actually a version ID
-        delivery_channel: 'email',
-        ab_group: 'A',
-        status: 'draft'
-      }));
+    if (Array.isArray(promptSelections) && promptSelections.length > 0) {
+      const selections = promptSelections.filter((selection): selection is PromptSelectionPayload => (
+        typeof selection === 'object'
+        && selection !== null
+        && 'promptId' in selection
+        && typeof (selection as { promptId: unknown }).promptId === 'string'
+      ));
 
-      const { error: promptsError } = await supabase
-        .from('campaign_prompts')
-        .insert(campaignPrompts);
+      if (selections.length > 0) {
+        const campaignPrompts = selections.map((selection) => ({
+          campaign_id: campaign.id,
+          prompt_version_id: selection.promptId,
+          delivery_channel: 'email',
+          ab_group: 'A',
+          status: 'draft'
+        }));
 
-      if (promptsError) throw promptsError;
+        const { error: promptsError } = await supabase
+          .from('campaign_prompts')
+          .insert(campaignPrompts);
+
+        if (promptsError) throw promptsError;
+      }
     }
 
     // Return in expected format
-    const result = {
-      id: campaign.id,
-      name: campaign.name,
-      createdAt: campaign.created_at,
-      updatedAt: campaign.updated_at,
-      promptSelections: promptSelections
-    };
+    const result = toCampaignResponse(campaign);
+
+    // Preserve caller-provided promptSelections version values if present
+    if (Array.isArray(promptSelections)) {
+      result.promptSelections = promptSelections.filter((selection): selection is PromptSelectionPayload => (
+        typeof selection === 'object'
+        && selection !== null
+        && 'promptId' in selection
+        && typeof (selection as { promptId: unknown }).promptId === 'string'
+      ));
+    }
 
     return NextResponse.json({ ok: true, data: result }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (error) {
+    return errorResponse(error);
   }
 }

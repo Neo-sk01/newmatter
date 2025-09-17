@@ -20,7 +20,8 @@ export async function POST(req: Request) {
     });
 
     return result.toTextStreamResponse();
-  } catch (e) {
+  } catch (error) {
+    console.error("/api/generate-email error", error);
     return new Response("Failed to generate", { status: 500 });
   }
 }
