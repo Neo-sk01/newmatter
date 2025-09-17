@@ -383,13 +383,10 @@ function Sidebar({
   return (
     <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
       <div className="flex items-center gap-2 px-3 pb-6">
-        <Image 
-          src="/salesMattertm (1).png" 
-          alt="SalesMatter Logo" 
-          width={180} 
-          height={60}
+        <img 
+          src="/salesMattertm noBG, SVG.svg" 
+          alt="Sales Matter Logo" 
           className="h-12 w-auto"
-          priority
         />
       </div>
       <nav className="space-y-2">
@@ -546,7 +543,7 @@ function Topbar() {
   const isDark = (resolvedTheme ?? theme) === "dark";
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
