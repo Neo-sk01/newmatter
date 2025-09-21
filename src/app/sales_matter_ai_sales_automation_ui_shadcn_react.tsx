@@ -57,7 +57,9 @@ import {
   ArrowRight,
   BadgeCheck,
   BrainCircuit,
+  Copy,
   CalendarDays,
+  Sparkles,
   Check,
   ChevronDown,
   ChevronRight,
@@ -126,6 +128,12 @@ interface LeadList {
   leads: Lead[];
 }
 
+interface PromptConfig {
+  id: string;
+  name: string;
+  content: string;
+}
+
 type EnrichOptions = {
   linkedin: boolean;
   company: boolean;
@@ -160,156 +168,97 @@ const initialLeads: Lead[] = [
 
 // Chart data is now fetched dynamically from SendGrid API
 
-// System prompt for AI email generation (MambaOnline Email Marketing Agent)
-const SYSTEM_PROMPT = `I'm giving you three information.
-Firstly will be the prompt
-Secondly will be the linkedIn description
-Thirdly will be the blog posts
+// Default prompt library seeded with the provided few-shot instructions
+const DEFAULT_PROMPT_CONTENT = `### **Few-Shot Prompt for AI Agent**
 
-I want you to write an email using that info
+You are an expert B2B outreach copywriter.
+Your task is to write **personalized cold outreach emails** that sound natural, human, and conversational, not robotic or overly polished.
 
-Always start pointing out the info you have about the receiver
+**Writing style instructions:**
 
-Company Name - ClarinsMen
+* Vary sentence length and rhythm.
+* Mix short and long sentences, let thoughts flow like real human writing.
+* Small hesitations or cautious phrases are welcome ("perhaps," "I think," "it feels like").
+* Do not balance every argument too neatly. Let some thoughts feel unfinished or slightly tangential.
+* Keep tone professional but approachable, no slang.
+* Break into paragraphs where it feels natural.
+* Do **not** use em-dashes (-). Use commas or pauses instead.
 
-1.
+**Email structure:**
 
-# MambaOnline Email Marketing Agent - Single-Shot Prompt
+1. **Subject line**: Reference the brand and South Africa's R250B LGBTIQ+ market.
+2. **Opening line**: Personalized recognition of their role, brand, or achievement.
+3. **Authority line**: Introduce MambaOnline as South Africa's leading LGBTIQ+ platform (40,000 monthly visitors, 23 years trust). Include stats: R250B annual purchasing power, 60% hold degrees, 44% in management, 76-83% prefer inclusive brands.
+4. **Alignment**: Connect their brand's priorities to opportunities with this audience. Suggest a few ideas (Pride campaigns, targeted ads, digital storytelling, editorials).
+5. **CTA**: Invite them to a quick chat next week.
+6. **Footer**: Always sign off as Nompilo Gwala with this exact block:
 
-You are an expert email marketing agent for MambaOnline, South Africa's longest-running LGBTIQ+ digital media platform (23+ years). Your mission is to create compelling, human-like cold outreach emails that connect brands with South Africa's underserved but lucrative LGBTIQ+ market.
+\`\`\`
+Best regards,  
+Nompilo Gwala  
+Head of Commercial | MambaOnline  
+P.O. Box 413952, Craighall, 2024, South Africa  
+Tel: 072 304 8280 / 078 421 6022  
+Email: nompilo@mambaonline.com  
+"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."  
+\`\`\`
 
-## WRITING STYLE REQUIREMENTS
+---
 
-Human-Like Authenticity:
+### **Example 1 - Kerry Largier (Yuppiechef)**
 
-* Vary sentence structure with mix of long and short sentences
-* Add subtle imperfections: slight redundancy, hesitations ("perhaps," "I think"), cautious qualifiers
-* Avoid perfect symmetry - let some thoughts feel unfinished or tangential
-* Include light personalization with reactions, small experiences, or opinions
-* Introduce mild ambiguity or contradiction for realism
-* Use natural paragraph breaks, avoid rigid textbook structure
-* Skip slang/regionalisms but maintain natural, conversational tone
+**Subject:** Partnering with Yuppiechef to Engage South Africa's R250B LGBTIQ+ Market
 
-## ORGANIZATION BACKGROUND
+Hi Kerry,
 
-MambaOnline Core Identity:
+I have been following your move to Yuppiechef and it feels like such a natural fit. Your path from fintech at Spot Money to wellness at Faithful to Nature shows you can adapt across industries, and that is not an easy thing to do.
 
-* South Africa's most authoritative LGBTIQ+ digital voice
-* 23+ years of community trust and media advocacy
-* 40,000+ unique monthly visitors, 33,000+ social followers
-* Weekly newsletter (1,600+ subscribers)
-* Recognized by Human Rights Watch for hate crime reporting
-* Official media partner for 2024 ILGA World Conference
-  Target Market Power:
-* R250 billion annual purchasing power
-* 60%+ hold degrees or postgrad qualifications
-* 44% in management roles
-* 33% earn over R30,000/month
-* 76% prefer brands advertising on LGBTIQ+ platforms
-* 83% want more brands actively identifying with LGBTIQ+ communities
-* 57% feel ignored by mainstream brands
-  Services Offered:
-* Daily LGBTIQ+ news and editorial content
-* Digital advertising (leaderboards, rectangles, mobile headers, skyscrapers)
-* Pride Month campaign packages (June)
-* Advertorial content and social media amplification
-* Newsletter visibility and community engagement
-* Past clients: FASHION BRANDZ
+I am with MambaOnline, South Africa's leading LGBTIQ+ digital platform. We reach 40,000 monthly visitors and have built 23 years of community trust. The audience we serve represents R250B in annual purchasing power. Many hold degrees, 44 percent are in management, and 76 percent say they prefer brands that visibly support the community.
 
-## MANDATORY EMAIL STRUCTURE: IP = XYZ FORMULA
+I think Yuppiechef could do something special here. Pride campaigns, digital collaborations, or even smaller features could land well with our audience.
 
-X: Value Proposition + Benefit + Hook
+Would you be open to a chat next week to explore?
 
-* Brief organization introduction
-* Clear value proposition relevant to recipient
-* Immediate benefit statement (what's in it for them)
-* Emotional/logical hook connecting to their context
-  Y: Reason + Cross-Reference
-* Specific reason for outreach
-* Evidence of research (recent news, achievements, challenges)
-* Explicit alignment between your solution and their goals/needs
-  Z: Clear Call to Action
-* Precise, low-friction action request
-* Time-bound and easy to execute
-* Based on X and Y connection established
+Best regards,
+Nompilo Gwala
+Head of Commercial | MambaOnline
+P.O. Box 413952, Craighall, 2024, South Africa
+Tel: 072 304 8280 / 078 421 6022
+Email: nompilo@mambaonline.com
+"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."
 
-## EMAIL COMPONENTS
+---
 
-Subject Line:
+### **Example 2 - Michelle Hewitt (Castle Lite)**
 
-* 1-2 concise options
-* Curiosity-driven or benefit-focused
-* Reference community size, buying power, or specific opportunities
-  Structure (120-150 words 3 paragraphs, don't use dashes - in text ):
+**Subject:** Connecting Castle Lite with South Africa's R250B LGBTIQ+ Market
 
-1. Personalized greeting
-2. Value proposition with MambaOnline's authority positioning – us this specifically I'm with MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+ monthly visitors across Southern Africa
-3. Strategic inputs about recipient's specific work/campaigns
-4. Layered opportunity presentation (editorial + digital + ongoing)
-5. Clear, time-bound call to action
-6. Professional closing with contact info
+Hi Michelle,
 
-## KEY MESSAGING ANGLES
+Your career path from agency life at Ogilvy and FCB to leading communications for Castle Lite shows real depth in FMCG and liquor marketing. I admire how you have managed large, complex portfolios while still keeping campaigns bold and creative.
 
-Authority Positioning:
+I am with MambaOnline, South Africa's leading LGBTIQ+ digital platform. We have 40,000 monthly visitors and over 23 years of community trust. Our audience represents R250B in annual purchasing power. They are educated, many in leadership, and 83 percent prefer brands that align with inclusivity.
 
-* "23 years of community trust"
-* "South Africa's #1 LGBTIQ+ platform"
-  Market Opportunity:
-* "R250B+ annual buying power"
-* "40,000+ engaged monthly readers"
-* "76% prefer brands on LGBTIQ+ platforms"
-* "83% want more brand representation"
-  Credibility Markers:
-* Mention specific audience demographics
+Castle Lite already has a reputation for being progressive, but I think there is room to push further. Pride campaigns, lifestyle collaborations, or digital advertising could strengthen that identity with our community.
 
-## SAMPLE EXECUTION FRAMEWORK
+Would you be open to a quick chat next week to discuss possibilities?
 
-Opening Hook Examples:
+Best regards,
+Nompilo Gwala
+Head of Commercial | MambaOnline
+P.O. Box 413952, Craighall, 2024, South Africa
+Tel: 072 304 8280 / 078 421 6022
+Email: nompilo@mambaonline.com
+"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."
+`
 
-* "While most brands are missing South Africa's R250B LGBTIQ+ market..."
-* "Your [specific campaign] caught our attention because..."
-* "23 years of community trust has taught us..."
-  Value Bridge Examples: listed below
-  I'm with
-  MambaOnline, South Africa's leading LGBTIQ+ digital platform serving 40,000+
-  monthly visitors across Southern Africa. We help forward-thinking SaaS companies like Xero eliminate wasted spend on broad SME campaigns while maximizing authentic engagement with high-value business communities that actually convert to premium plans.
-  Your recent post about the vibrant energy at your Johannesburg and Cape Town roadshows really resonated (4,000 attendees—incredible!). That community-building approach aligns perfectly with our audience: LGBTIQ+ business owners represent a significant portion of SA's R250 billion community purchasing power, with 60% holding degrees, 44% in management roles, and 33% earning over R30,000 monthly. These are exactly the sophisticated SMEs who need robust accounting solutions.
-  I'm reaching out because your Beautiful Business Fund initiative shows you understand the importance of supporting underrepresented entrepreneurs. We help cut down on generic SME marketing and boost targeted reach where it matters—83% of our community actively seeks brands that identify with queer businesses, and they're typically early adopters of innovative business tools- "We can help you reach [specific outcome] through..."
-  Action Phrases:
-* "Can we explore commercial partnership opportunities this week?"
-* "Would a 20-minute call work to discuss possibilities?"
-
-## EXECUTION INSTRUCTIONS
-
-When given a target company/recipient:
-
-1. Research Integration: Reference specific campaigns, values, or recent achievements
-2. Opportunity Sizing: Quantify potential reach, engagement, or conversion
-3. Urgency Creation: Reference market trends or find a connection to secure a meeting
-  Tone Balance:
-
-* Professional yet approachable
-* Confident but not pushy
-* Informed and research-backed, where possible site recent articles or public information that tie in with custom campaigns
-* Results-focused with ROI for the specific brand
-  Your goal is to create emails that feel personally crafted, demonstrate deep understanding of both the recipient's business and the LGBTIQ+ market opportunity, while positioning MambaOnline as the essential bridge between brands and this powerful community that clearly demonstrates value and a commercial opportunity or relationship that is mutually beneficial.`;
-
-const HUMAN_OUTREACH_SYSTEM_PROMPT = `You are an email cold outreach expert helping me create content that reads like it was written by a human naturally, casually, with a realistic thought process.
-
-Here are your key goals:
-
-Vary sentence structure. Use a mixture of long and short sentences. Interrupt smooth flow occasionally, just enough to feel real and authentic.
-
-Add subtle imperfections. Slight redundancy, hesitations (like "perhaps" or "I think"), or overly cautious qualifiers make it feel more human. Avoid perfect symmetry. Don't balance every argument too neatly. Let some thoughts feel unfinished or tangential, like a real person thinking out loud. Use light personalization. Mention reactions, small experiences, or opinions, even invented ones, that a typical person might include.
-
-Introduce ambiguity or mild contradiction. Humans aren't always consistent; a slight shift in tone or perspective adds realism.
-
-Skip slang or regionalisms. Keep the language neutral, but still natural. Focus on tone, pacing, and realism.
-
-Format naturally. Break into paragraphs where it feels intuitive. Avoid overly rigid or textbook-like structure.
-
-Do not include any em dashes (-) and use connecting words instead like "therefore", "perhaps", "maybe", "because".`;
+const DEFAULT_PROMPTS: PromptConfig[] = [
+  {
+    id: "few-shot-nompilo",
+    name: "Few-Shot | Nompilo Outreach",
+    content: DEFAULT_PROMPT_CONTENT,
+  },
+];
 
 // ----------------------------------------------
 // Utility functions
@@ -324,6 +273,8 @@ const tokenFill = (template: string, lead: Lead) =>
     .replaceAll("{{website}}", lead.website || "");
 
 const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolean).join(" ");
+
+const createPromptId = () => `prompt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 // Apply LLM-provided mapping rules to a CSV row
 function applyMapping(
@@ -446,6 +397,16 @@ function Sidebar({
   onNewList,
   onRemoveList,
   onRenameList,
+  prompts,
+  activePromptId,
+  activePrompt,
+  onSelectPrompt,
+  onCreatePrompt,
+  onDuplicatePrompt,
+  onDeletePrompt,
+  onRenamePrompt,
+  onUpdatePromptContent,
+  onResetPrompt,
 }: {
   current: string;
   onChange: (v: string) => void;
@@ -455,7 +416,35 @@ function Sidebar({
   onNewList: () => void;
   onRemoveList: (id: string) => void;
   onRenameList: (id: string, name: string) => void;
+  prompts: PromptConfig[];
+  activePromptId: string;
+  activePrompt: PromptConfig | null;
+  onSelectPrompt: (id: string) => void;
+  onCreatePrompt: () => void;
+  onDuplicatePrompt: (id: string) => void;
+  onDeletePrompt: (id: string) => void;
+  onRenamePrompt: (id: string, name: string) => void;
+  onUpdatePromptContent: (id: string, content: string) => void;
+  onResetPrompt: (id: string) => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) {
+        clearTimeout(copyTimer.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (copyTimer.current) {
+      clearTimeout(copyTimer.current);
+      copyTimer.current = null;
+    }
+    setCopied(false);
+  }, [activePromptId]);
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
     { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
@@ -511,6 +500,89 @@ function Sidebar({
           <div className="px-3 text-xs text-muted-foreground">No lists. Create one to get started.</div>
         )}
       </div>
+      <Separator className="my-6" />
+      <div className="px-3 flex items-center justify-between mb-2">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prompt Library</div>
+        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onCreatePrompt}>
+          <Sparkles className="mr-2 h-4 w-4" /> New
+        </Button>
+      </div>
+      <div className="space-y-2">
+        {prompts.map((prompt) => (
+          <SidebarPromptRow
+            key={prompt.id}
+            prompt={prompt}
+            active={activePromptId === prompt.id}
+            onSelect={() => onSelectPrompt(prompt.id)}
+            onRename={(name) => onRenamePrompt(prompt.id, name)}
+            onDelete={() => onDeletePrompt(prompt.id)}
+            onDuplicate={() => onDuplicatePrompt(prompt.id)}
+            disableDelete={prompts.length <= 1}
+          />
+        ))}
+        {prompts.length === 0 && (
+          <div className="px-3 text-xs text-muted-foreground">No prompts yet. Add one to get started.</div>
+        )}
+      </div>
+      {activePrompt && (
+        <div className="px-3 mt-4">
+          <ScrollArea className="max-h-[420px] pr-1">
+            <div className="space-y-2 pb-2">
+              <Label htmlFor="active-prompt-editor" className="text-xs uppercase tracking-wide text-muted-foreground">
+                Active prompt
+              </Label>
+              <Textarea
+                id="active-prompt-editor"
+                value={activePrompt.content}
+                onChange={(e) => onUpdatePromptContent(activePrompt.id, e.target.value)}
+                className="h-[320px] resize-none rounded-2xl border bg-background/60 text-sm"
+              />
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => onDuplicatePrompt(activePrompt.id)}
+                >
+                  <Copy className="mr-2 h-4 w-4" /> Duplicate
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={() => onResetPrompt(activePrompt.id)}
+                >
+                  Reset
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={async () => {
+                    if (typeof navigator === "undefined" || !navigator.clipboard) {
+                      console.warn("Clipboard API is unavailable in this environment");
+                      return;
+                    }
+                    try {
+                      await navigator.clipboard.writeText(activePrompt.content);
+                      setCopied(true);
+                      if (copyTimer.current) {
+                        clearTimeout(copyTimer.current);
+                      }
+                      copyTimer.current = setTimeout(() => setCopied(false), 2000);
+                    } catch (err) {
+                      console.error("Failed to copy prompt", err);
+                    }
+                  }}
+                >
+                  <Copy className="mr-2 h-4 w-4" /> Copy
+                </Button>
+              </div>
+              {copied && <div className="text-[11px] text-right text-muted-foreground">Prompt copied to clipboard</div>}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
       <Separator className="my-6" />
       <div className="px-3 text-xs text-muted-foreground">
         v1.0 · Shadcn UI · Tailwind
@@ -601,6 +673,125 @@ function SidebarListRow({
               size="icon"
               className="rounded-xl h-8 w-8"
               aria-label="Save name"
+              onClick={commit}
+            >
+              <Check className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Cancel rename"
+              onClick={cancel}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SidebarPromptRow({
+  prompt,
+  active,
+  onSelect,
+  onRename,
+  onDelete,
+  onDuplicate,
+  disableDelete,
+}: {
+  prompt: PromptConfig;
+  active: boolean;
+  onSelect: () => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  disableDelete: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(prompt.name);
+
+  useEffect(() => {
+    setName(prompt.name);
+  }, [prompt.name]);
+
+  const commit = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== prompt.name) {
+      onRename(trimmed);
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setName(prompt.name);
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-center gap-2 px-1">
+      {!editing ? (
+        <>
+          <Button
+            variant={active ? "secondary" : "ghost"}
+            size="lg"
+            className={cx("flex-1 justify-start gap-3 rounded-xl text-base min-w-0", active && "shadow")}
+            onClick={onSelect}
+          >
+            <AlignLeft className="h-6 w-6 flex-shrink-0" />
+            <span className="truncate">{prompt.name}</span>
+          </Button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Duplicate prompt"
+              onClick={onDuplicate}
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Rename prompt"
+              onClick={() => setEditing(true)}
+            >
+              <Edit3 className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Delete prompt"
+              onClick={onDelete}
+              disabled={disableDelete}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center gap-2 flex-1">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") cancel();
+            }}
+            className="rounded-xl flex-1"
+            autoFocus
+          />
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="rounded-xl h-8 w-8"
+              aria-label="Save prompt name"
               onClick={commit}
             >
               <Check className="h-3 w-3" />
@@ -1789,6 +1980,67 @@ export default function SalesAutomationUI() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [generatingLeadId, setGeneratingLeadId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [prompts, setPrompts] = useState<PromptConfig[]>(DEFAULT_PROMPTS);
+  const [activePromptId, setActivePromptId] = useState<string>(DEFAULT_PROMPTS[0]?.id ?? "");
+
+  const activePrompt = useMemo(() => {
+    if (prompts.length === 0) {
+      return null;
+    }
+    return prompts.find((p) => p.id === activePromptId) ?? prompts[0];
+  }, [prompts, activePromptId]);
+
+  const handlePromptContentChange = (id: string, content: string) => {
+    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content } : prompt)));
+  };
+
+  const handlePromptNameChange = (id: string, name: string) => {
+    const nextName = name.trim();
+    if (!nextName) return;
+    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, name: nextName } : prompt)));
+  };
+
+  const handleCreatePrompt = () => {
+    const newId = createPromptId();
+    setPrompts((prev) => {
+      const newPrompt: PromptConfig = {
+        id: newId,
+        name: `Prompt ${prev.length + 1}`,
+        content: "Describe the tone, structure, and examples you want the assistant to follow.",
+      };
+      return [...prev, newPrompt];
+    });
+    setActivePromptId(newId);
+  };
+
+  const handleDuplicatePrompt = (id: string) => {
+    const source = prompts.find((p) => p.id === id);
+    if (!source) return;
+    const newId = createPromptId();
+    const clone: PromptConfig = {
+      id: newId,
+      name: `${source.name} Copy`,
+      content: source.content,
+    };
+    setPrompts((prev) => [...prev, clone]);
+    setActivePromptId(newId);
+  };
+
+  const handleDeletePrompt = (id: string) => {
+    setPrompts((prev) => {
+      if (prev.length <= 1) return prev;
+      const next = prev.filter((prompt) => prompt.id !== id);
+      if (next.length === prev.length) return prev;
+      if (id === activePromptId) {
+        setActivePromptId(next[0]?.id ?? "");
+      }
+      return next;
+    });
+  };
+
+  const handleResetPrompt = (id: string) => {
+    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content: DEFAULT_PROMPT_CONTENT } : prompt)));
+  };
 
   const handleSelectLeadId = (id: string | null) => {
     setGenerateError(null);
@@ -1932,7 +2184,7 @@ export default function SalesAutomationUI() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          system: HUMAN_OUTREACH_SYSTEM_PROMPT,
+          system: activePrompt?.content ?? DEFAULT_PROMPT_CONTENT,
           prompt,
         }),
       });
@@ -2134,6 +2386,16 @@ return (
           onNewList={newEmptyList}
           onRemoveList={removeListById}
           onRenameList={renameList}
+          prompts={prompts}
+          activePromptId={activePrompt?.id ?? ""}
+          activePrompt={activePrompt}
+          onSelectPrompt={setActivePromptId}
+          onCreatePrompt={handleCreatePrompt}
+          onDuplicatePrompt={handleDuplicatePrompt}
+          onDeletePrompt={handleDeletePrompt}
+          onRenamePrompt={handlePromptNameChange}
+          onUpdatePromptContent={handlePromptContentChange}
+          onResetPrompt={handleResetPrompt}
         />
         <div className="flex-1">
           <Topbar />
