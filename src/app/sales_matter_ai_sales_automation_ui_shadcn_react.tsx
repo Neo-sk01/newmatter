@@ -1,7 +1,6 @@
 "use client";
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import Papa from "papaparse";
-import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -48,6 +47,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
 import { WorkspaceProvider } from "@/lib/context/workspace-context";
+import { Logo } from "@/components/logo";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import FooterSection from "@/components/footer-section";
@@ -295,6 +295,22 @@ When given a target company/recipient:
 * Results-focused with ROI for the specific brand
   Your goal is to create emails that feel personally crafted, demonstrate deep understanding of both the recipient's business and the LGBTIQ+ market opportunity, while positioning MambaOnline as the essential bridge between brands and this powerful community that clearly demonstrates value and a commercial opportunity or relationship that is mutually beneficial.`;
 
+const HUMAN_OUTREACH_SYSTEM_PROMPT = `You are an email cold outreach expert helping me create content that reads like it was written by a human naturally, casually, with a realistic thought process.
+
+Here are your key goals:
+
+Vary sentence structure. Use a mixture of long and short sentences. Interrupt smooth flow occasionally, just enough to feel real and authentic.
+
+Add subtle imperfections. Slight redundancy, hesitations (like "perhaps" or "I think"), or overly cautious qualifiers make it feel more human. Avoid perfect symmetry. Don't balance every argument too neatly. Let some thoughts feel unfinished or tangential, like a real person thinking out loud. Use light personalization. Mention reactions, small experiences, or opinions, even invented ones, that a typical person might include.
+
+Introduce ambiguity or mild contradiction. Humans aren't always consistent; a slight shift in tone or perspective adds realism.
+
+Skip slang or regionalisms. Keep the language neutral, but still natural. Focus on tone, pacing, and realism.
+
+Format naturally. Break into paragraphs where it feels intuitive. Avoid overly rigid or textbook-like structure.
+
+Do not include any em dashes (-) and use connecting words instead like "therefore", "perhaps", "maybe", "because".`;
+
 // ----------------------------------------------
 // Utility functions
 // ----------------------------------------------
@@ -454,14 +470,7 @@ function Sidebar({
   return (
     <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
       <div className="flex items-center gap-2 px-3 pb-6">
-        <Image 
-          src="/salesMattertm (1).png" 
-          alt="SalesMatter Logo" 
-          width={180} 
-          height={60}
-          className="h-12 w-auto"
-          priority
-        />
+        <Logo className="h-12" priority />
       </div>
       <nav className="space-y-2">
         {items.map((it) => (
@@ -677,13 +686,18 @@ function Stepper({ step, onStep }: { step: number; onStep: (n: number) => void }
     { key: "Analytics", icon: <LineChart className="h-4 w-4" /> },
   ];
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-muted/30 p-2">
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-lime-600 bg-lime-500 p-2 text-white">
       {steps.map((s, i) => (
         <Button
           key={s.key}
-          variant={i === step ? "secondary" : "ghost"}
+          variant="ghost"
           size="sm"
-          className="rounded-xl"
+          className={cx(
+            "rounded-xl px-3 text-white border",
+            i === step
+              ? "bg-black border-black hover:bg-black"
+              : "bg-white/10 border-white/40 hover:bg-white/20"
+          )}
           onClick={() => onStep(i)}
         >
           <span className="mr-2">{s.icon}</span>
@@ -1022,6 +1036,9 @@ function GenerateScreen({
   template,
   selectedLeadId,
   setSelectedLeadId,
+  onGenerateColdEmail,
+  generatingLeadId,
+  generateError,
 }: {
   leads: Lead[];
   emails: Record<string, GeneratedEmail>;
@@ -1029,6 +1046,9 @@ function GenerateScreen({
   template: string;
   selectedLeadId: string | null;
   setSelectedLeadId: (id: string | null) => void;
+  onGenerateColdEmail: (lead: Lead) => Promise<void> | void;
+  generatingLeadId: string | null;
+  generateError: string | null;
 }) {
   const selected = useMemo(() => {
     if (!leads.length) return null;
@@ -1048,14 +1068,62 @@ function GenerateScreen({
   const preview = previewFor(selected);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1">
+    <div className="grid gap-4">
+      <Card className="rounded-2xl">
         <CardHeader>
+          <CardTitle>Preview</CardTitle>
+          <CardDescription>Output of your generated prompt</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <ScrollArea className="h-[360px] rounded-2xl border">
+                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                </ScrollArea>
+                <div className="flex items-center gap-3">
+                  <Button
+                    className="rounded-xl"
+                    onClick={() => selected && onGenerateColdEmail(selected)}
+                    disabled={!selected || generatingLeadId === selected?.id}
+                  >
+                    {generatingLeadId === selected?.id ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="mr-2 h-4 w-4" /> Generate Email
+                      </>
+                    )}
+                  </Button>
+                  {generateError && selected && (
+                    <span className="text-xs text-destructive">
+                      {generateError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl max-h-[calc(100vh-220px)] overflow-hidden">
+        <CardHeader className="shrink-0">
           <CardTitle>Imported Leads</CardTitle>
           <CardDescription>Select a lead to preview</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-[calc(100vh-260px)]">
+        <CardContent className="p-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full max-h-[calc(100vh-260px)]">
             <div className="divide-y">
               {leads.map((l) => (
                 <button
@@ -1078,32 +1146,6 @@ function GenerateScreen({
               )}
             </div>
           </ScrollArea>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Preview</CardTitle>
-          <CardDescription>Output of your generated prompt</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {selected ? (
-            <>
-              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
-              <div className="grid gap-2">
-                <Label>Subject</Label>
-                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Body</Label>
-                <ScrollArea className="h-[360px] rounded-2xl border">
-                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
-                </ScrollArea>
-              </div>
-            </>
-          ) : (
-            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
-          )}
         </CardContent>
       </Card>
     </div>
@@ -1117,6 +1159,9 @@ function PreviewScreenMinimal({
   template,
   selectedLeadId,
   setSelectedLeadId,
+  onGenerateColdEmail,
+  generatingLeadId,
+  generateError,
 }: {
   leads: Lead[];
   emails: Record<string, GeneratedEmail>;
@@ -1124,6 +1169,9 @@ function PreviewScreenMinimal({
   template: string;
   selectedLeadId: string | null;
   setSelectedLeadId: (id: string | null) => void;
+  onGenerateColdEmail: (lead: Lead) => Promise<void> | void;
+  generatingLeadId: string | null;
+  generateError: string | null;
 }) {
   const selected = useMemo(() => {
     if (!leads.length) return null;
@@ -1143,14 +1191,62 @@ function PreviewScreenMinimal({
   const preview = previewFor(selected);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="rounded-2xl lg:col-span-1">
+    <div className="grid gap-4">
+      <Card className="rounded-2xl">
         <CardHeader>
+          <CardTitle>Preview</CardTitle>
+          <CardDescription>Output of your generated prompt</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {selected ? (
+            <>
+              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
+              <div className="grid gap-2">
+                <Label>Subject</Label>
+                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Body</Label>
+                <ScrollArea className="h-[360px] rounded-2xl border">
+                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
+                </ScrollArea>
+                <div className="flex items-center gap-3">
+                  <Button
+                    className="rounded-xl"
+                    onClick={() => selected && onGenerateColdEmail(selected)}
+                    disabled={!selected || generatingLeadId === selected?.id}
+                  >
+                    {generatingLeadId === selected?.id ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="mr-2 h-4 w-4" /> Generate Email
+                      </>
+                    )}
+                  </Button>
+                  {generateError && selected && (
+                    <span className="text-xs text-destructive">
+                      {generateError}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl max-h-[calc(100vh-220px)] overflow-hidden">
+        <CardHeader className="shrink-0">
           <CardTitle>Imported Leads</CardTitle>
           <CardDescription>Select a lead to preview</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-[calc(100vh-260px)]">
+        <CardContent className="p-0 flex-1 overflow-hidden">
+          <ScrollArea className="h-full max-h-[calc(100vh-260px)]">
             <div className="divide-y">
               {leads.map((l) => (
                 <button
@@ -1173,32 +1269,6 @@ function PreviewScreenMinimal({
               )}
             </div>
           </ScrollArea>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Preview</CardTitle>
-          <CardDescription>Output of your generated prompt</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {selected ? (
-            <>
-              <div className="text-sm text-muted-foreground">For: {selected.firstName} {selected.lastName} · {selected.company}</div>
-              <div className="grid gap-2">
-                <Label>Subject</Label>
-                <div className="rounded-xl border px-3 py-2 bg-muted/30 text-sm break-words">{preview.subject || '—'}</div>
-              </div>
-              <div className="grid gap-2">
-                <Label>Body</Label>
-                <ScrollArea className="h-[360px] rounded-2xl border">
-                  <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
-                </ScrollArea>
-              </div>
-            </>
-          ) : (
-            <div className="text-sm text-muted-foreground">Select a lead to see the preview.</div>
-          )}
         </CardContent>
       </Card>
     </div>
@@ -1717,6 +1787,13 @@ export default function SalesAutomationUI() {
   const [batchSize, setBatchSize] = useState(20);
   const [schedule, setSchedule] = useState<Date | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [generatingLeadId, setGeneratingLeadId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const handleSelectLeadId = (id: string | null) => {
+    setGenerateError(null);
+    setSelectedLeadId(id);
+  };
 
   // Preview using the first lead
   const preview = useMemo(() => {
@@ -1842,6 +1919,87 @@ export default function SalesAutomationUI() {
     setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })));
   };
 
+  const generateColdEmailForLead = async (lead: Lead) => {
+    if (!lead) return;
+    setGenerateError(null);
+    setGeneratingLeadId(lead.id);
+    try {
+      const baseSubject = tokenFill(subject, lead) || `Quick intro for ${lead.company}`;
+      const baseTemplate = tokenFill(template, lead);
+      const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}\n\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic. Respond with valid JSON in the shape {"subject": "...", "body": "..."}.`;
+
+      const response = await fetch("/api/generate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: HUMAN_OUTREACH_SYSTEM_PROMPT,
+          prompt,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed with status ${response.status}`);
+      }
+
+      const raw = (await response.text()).trim();
+
+      let nextSubject = "";
+      let nextBody = "";
+
+      try {
+        const jsonMatch = raw.match(/\{[\s\S]*}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          nextSubject = typeof parsed.subject === "string" ? parsed.subject.trim() : "";
+          nextBody = typeof parsed.body === "string" ? parsed.body.trim() : "";
+        }
+      } catch (err) {
+        console.warn("Failed to parse AI response as JSON", err);
+      }
+
+      if (!nextSubject) {
+        const subjectMatch = raw.match(/subject[:\-\s]+(.+)/i);
+        if (subjectMatch) {
+          nextSubject = subjectMatch[1].trim();
+        }
+      }
+
+      if (!nextBody) {
+        const bodyIndex = raw.indexOf("body:");
+        if (bodyIndex >= 0) {
+          nextBody = raw
+            .slice(bodyIndex + 5)
+            .replace(/^\s+/, "")
+            .trim();
+        } else {
+          nextBody = raw;
+        }
+      }
+
+      setEmails((prev) => ({
+        ...prev,
+        [lead.id]: {
+          leadId: lead.id,
+          subject: nextSubject || baseSubject,
+          body: nextBody || baseTemplate,
+        },
+      }));
+
+      setLeads((prev) =>
+        prev.map((l) =>
+          l.id === lead.id
+            ? { ...l, status: "generated" }
+            : l
+        )
+      );
+    } catch (error) {
+      console.error("Cold email generation failed", error);
+      setGenerateError("Failed to generate email. Please try again.");
+    } finally {
+      setGeneratingLeadId(null);
+    }
+  };
+
   const handleApprove = (leadId: string, approved: boolean) => {
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: approved ? "approved" : "rejected" } : l)));
   };
@@ -1878,9 +2036,9 @@ export default function SalesAutomationUI() {
   // Keep a sensible selection for the minimal preview screen
   useEffect(() => {
     if (!leads.length) {
-      setSelectedLeadId(null);
+      handleSelectLeadId(null);
     } else if (!selectedLeadId || !leads.some(l => l.id === selectedLeadId)) {
-      setSelectedLeadId(leads[0].id);
+      handleSelectLeadId(leads[0].id);
     }
   }, [leads, selectedLeadId]);
 
@@ -2003,7 +2161,10 @@ return (
                 subject={subject}
                 template={template}
                 selectedLeadId={selectedLeadId}
-                setSelectedLeadId={setSelectedLeadId}
+                setSelectedLeadId={handleSelectLeadId}
+                onGenerateColdEmail={generateColdEmailForLead}
+                generatingLeadId={generatingLeadId}
+                generateError={generateError}
               />
             )}
 
@@ -2014,7 +2175,10 @@ return (
                 subject={subject}
                 template={template}
                 selectedLeadId={selectedLeadId}
-                setSelectedLeadId={setSelectedLeadId}
+                setSelectedLeadId={handleSelectLeadId}
+                onGenerateColdEmail={generateColdEmailForLead}
+                generatingLeadId={generatingLeadId}
+                generateError={generateError}
               />
             )}
 
@@ -2040,22 +2204,6 @@ return (
 
             {section === "settings" && <SettingsScreen />}
 
-            <Separator className="my-6" />
-
-            <Card className="rounded-2xl">
-              <CardHeader>
-                <CardTitle>How this UI maps to your requirements</CardTitle>
-                <CardDescription>Import → Enrich → Generate → Review → Send → Analytics</CardDescription>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground grid gap-2">
-                <div className="flex items-center gap-2"><CloudUpload className="h-4 w-4" /> Import leads from CSV/CRM</div>
-                <div className="flex items-center gap-2"><Database className="h-4 w-4" /> LinkedIn enrichment: search & attach profile URLs</div>
-                <div className="flex items-center gap-2"><BrainCircuit className="h-4 w-4" /> Prompt-based generation with tokens</div>
-                <div className="flex items-center gap-2"><FileText className="h-4 w-4" /> Review, edit, approve per-lead emails</div>
-                <div className="flex items-center gap-2"><Mail className="h-4 w-4" /> Batch sending, schedule, compliance</div>
-                <div className="flex items-center gap-2"><LineChart className="h-4 w-4" /> KPIs & charts for outcomes</div>
-              </CardContent>
-            </Card>
           </main>
         </div>
       </div>

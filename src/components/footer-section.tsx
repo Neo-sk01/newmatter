@@ -30,7 +30,7 @@ const links = [
 
 export default function FooterSection() {
     return (
-        <footer className="py-16 md:py-32 border-t border-border bg-muted/20">
+        <footer className="py-10 border-t border-border bg-muted/20">
             <div className="mx-auto max-w-5xl px-6">
                 <Link
                     href="/"
@@ -39,7 +39,7 @@ export default function FooterSection() {
                     <Logo />
                 </Link>
 
-                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
+                <div className="my-6 flex flex-wrap justify-center gap-6 text-sm">
                     {links.map((link, index) => (
                         <Link
                             key={index}
@@ -49,7 +49,7 @@ export default function FooterSection() {
                         </Link>
                     ))}
                 </div>
-                <div className="my-8 flex flex-wrap justify-center gap-6 text-sm">
+                <div className="my-6 flex flex-wrap justify-center gap-6 text-sm">
                     <Link
                         href="#"
                         target="_blank"
