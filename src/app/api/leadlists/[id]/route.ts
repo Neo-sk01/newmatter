@@ -134,8 +134,8 @@ export async function GET(
 
     return NextResponse.json({ ok: true, data: list });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const { message, code, details } = normalizeError(e);
+    return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
 }
 
@@ -213,8 +213,8 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true, data: updated });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const { message, code, details } = normalizeError(e);
+    return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
 }
 
@@ -239,7 +239,7 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    const { message, code, details } = normalizeError(e);
+    return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
 }

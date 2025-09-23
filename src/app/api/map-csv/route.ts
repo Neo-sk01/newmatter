@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { generateObject } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { jsonrepair } from "jsonrepair";
 
 // Canonical lead schema used by the app
 const LeadSchema = z.object({
@@ -99,14 +100,36 @@ Guidelines:
       `Sample rows (values as strings):\n${JSON.stringify(sampleRows, null, 2)}\n\n` +
       `Return a JSON object with:\n- headerMapping: map original column => one of [firstName,lastName,company,email,title,website,linkedin,ignore]\n- rules.splitFullName if applicable\n- sampleLeads: 3-10 normalized examples derived strictly from provided sample rows\n- notes: brief rationale if relevant.`;
 
-    const { object } = await generateObject({
-      model: openai("gpt-4o-mini"),
-      system,
-      prompt,
-      schema: ResponseSchema,
-      temperature: 0,
-      maxOutputTokens: 800,
-    });
+    const runGeneration = async () => {
+      try {
+        const { object } = await generateObject({
+          model: openai("gpt-4o-mini"),
+          system,
+          prompt,
+          schema: ResponseSchema,
+          temperature: 0,
+          maxOutputTokens: 800,
+        });
+        return object;
+      } catch (error) {
+        const maybeText =
+          typeof error === "object" && error !== null && "text" in error
+            ? (error as { text?: unknown }).text
+            : undefined;
+        if (typeof maybeText !== "string") throw error;
+
+        try {
+          const repaired = jsonrepair(maybeText);
+          const repairedJson = JSON.parse(repaired);
+          return ResponseSchema.parse(repairedJson);
+        } catch (repairError) {
+          console.warn("Failed to repair JSON from LLM", repairError);
+          throw error;
+        }
+      }
+    };
+
+    const object = await runGeneration();
 
     // Normalize headerMapping to: original header -> canonical string
     const normalize = (

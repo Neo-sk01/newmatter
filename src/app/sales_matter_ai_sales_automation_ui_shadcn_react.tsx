@@ -45,6 +45,22 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Sidebar as UiSidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarSeparator,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
 import { WorkspaceProvider } from "@/lib/context/workspace-context";
 import { Logo } from "@/components/logo";
@@ -330,6 +346,9 @@ const mapLocalLeadToApi = (lead: Lead) => ({
   status: lead.status,
 });
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (value: string) => UUID_PATTERN.test(value);
+
 type PromptApiPayload = {
   id: string;
   name: string;
@@ -464,7 +483,7 @@ function guessHeaderMapping(columns: string[]): Record<string, string> {
 // Subcomponents
 // ----------------------------------------------
 
-function Sidebar({
+function AppSidebar({
   current,
   onChange,
   lists,
@@ -509,6 +528,7 @@ function Sidebar({
 }) {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showActivePrompt, setShowActivePrompt] = useState(true);
 
   useEffect(() => {
     return () => {
@@ -526,168 +546,209 @@ function Sidebar({
     setCopied(false);
   }, [activePromptId]);
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
-    { key: "import", label: "Import", icon: <CloudUpload className="h-6 w-6" /> },
-    { key: "enrich", label: "Enrich", icon: <Database className="h-6 w-6" /> },
-    { key: "generate", label: "Generate", icon: <BrainCircuit className="h-6 w-6" /> },
-    { key: "preview", label: "Preview", icon: <Search className="h-6 w-6" /> },
-    { key: "review", label: "Review", icon: <FileText className="h-6 w-6" /> },
-    { key: "send", label: "Send", icon: <Mail className="h-6 w-6" /> },
-    { key: "analytics", label: "Analytics", icon: <LineChart className="h-6 w-6" /> },
-    { key: "settings", label: "Settings", icon: <Settings className="h-6 w-6" /> },
+    { key: "import", label: "Import", icon: <CloudUpload className="h-5 w-5" /> },
+    { key: "enrich", label: "Enrich", icon: <Database className="h-5 w-5" /> },
+    { key: "generate", label: "Generate", icon: <BrainCircuit className="h-5 w-5" /> },
+    { key: "preview", label: "Preview", icon: <Search className="h-5 w-5" /> },
+    { key: "review", label: "Review", icon: <FileText className="h-5 w-5" /> },
+    { key: "send", label: "Send", icon: <Mail className="h-5 w-5" /> },
+    { key: "analytics", label: "Analytics", icon: <LineChart className="h-5 w-5" /> },
+    { key: "settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
   ];
 
   return (
-    <div className="h-full w-[360px] border-r bg-muted/40 backdrop-blur p-[18px] hidden md:block">
-      <div className="flex items-center gap-2 px-3 pb-6">
-        <Logo className="h-12" priority />
-      </div>
-      <nav className="space-y-2">
-        {items.map((it) => (
-          <Button
-            key={it.key}
-            variant={current === it.key ? "secondary" : "ghost"}
-            size="lg"
-            className={cx(
-              "w-full justify-start gap-3 rounded-xl text-xl",
-              current === it.key && "shadow"
+    <UiSidebar collapsible="icon" className="border-r bg-muted/40 backdrop-blur text-sm">
+      <SidebarHeader className="pb-4">
+        <div className="flex items-center gap-2 px-2">
+          <Logo className="h-12" priority />
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((it) => (
+                <SidebarMenuItem key={it.key}>
+              <SidebarMenuButton
+                type="button"
+                isActive={current === it.key}
+                className="text-sm"
+                onClick={() => onChange(it.key)}
+              >
+                    {it.icon}
+                    <span className="truncate">{it.label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="flex-1">
+              Lead Lists
+              {loadingLeadLists && <span className="ml-1 text-[10px] lowercase text-muted-foreground"> syncing…</span>}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-xs"
+              onClick={onNewList}
+              disabled={loadingLeadLists}
+            >
+              <FolderPlus className="mr-2 h-4 w-4" /> New
+            </Button>
+          </SidebarGroupLabel>
+          <SidebarGroupContent className="space-y-2">
+            {lists.map((list) => (
+              <SidebarListRow
+                key={list.id}
+                list={list}
+                active={currentListId === list.id}
+                onSelect={() => onSelectList(list.id)}
+                onRemove={() => onRemoveList(list.id)}
+                onRename={(name) => onRenameList(list.id, name)}
+              />
+            ))}
+            {lists.length === 0 && (
+              <div className="px-1 text-xs text-muted-foreground">No lists. Create one to get started.</div>
             )}
-            onClick={() => onChange(it.key)}
-          >
-            {it.icon}
-            {it.label}
-          </Button>
-        ))}
-      </nav>
-      <Separator className="my-6" />
-      <div className="px-3 flex items-center justify-between mb-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Lead Lists {loadingLeadLists && <span className="ml-1 text-[10px] lowercase">syncing…</span>}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="rounded-xl"
-          onClick={onNewList}
-          disabled={loadingLeadLists}
-        >
-          <FolderPlus className="mr-2 h-4 w-4" /> New
-        </Button>
-      </div>
-      <div className="space-y-2">
-        {lists.map((list) => (
-          <SidebarListRow
-            key={list.id}
-            list={list}
-            active={currentListId === list.id}
-            onSelect={() => onSelectList(list.id)}
-            onRemove={() => onRemoveList(list.id)}
-            onRename={(name) => onRenameList(list.id, name)}
-          />
-        ))}
-        {lists.length === 0 && (
-          <div className="px-3 text-xs text-muted-foreground">No lists. Create one to get started.</div>
-        )}
-      </div>
-      <Separator className="my-6" />
-      <div className="px-3 flex items-center justify-between mb-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Prompt Library {loadingPrompts && <span className="ml-1 text-[10px] lowercase">loading…</span>}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="rounded-xl"
-          onClick={onCreatePrompt}
-          disabled={loadingPrompts}
-        >
-          <Sparkles className="mr-2 h-4 w-4" /> New
-        </Button>
-      </div>
-      <div className="space-y-2">
-        {prompts.map((prompt) => (
-          <SidebarPromptRow
-            key={prompt.id}
-            prompt={prompt}
-            active={activePromptId === prompt.id}
-            onSelect={() => onSelectPrompt(prompt.id)}
-            onRename={(name) => onRenamePrompt(prompt.id, name)}
-            onDelete={() => onDeletePrompt(prompt.id)}
-            onDuplicate={() => onDuplicatePrompt(prompt.id)}
-            disableDelete={prompts.length <= 1}
-          />
-        ))}
-        {prompts.length === 0 && (
-          <div className="px-3 text-xs text-muted-foreground">No prompts yet. Add one to get started.</div>
-        )}
-      </div>
-      {activePrompt && (
-        <div className="px-3 mt-4">
-          <ScrollArea className="max-h-[420px] pr-1">
-            <div className="space-y-2 pb-2">
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarSeparator />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="flex-1">
+              Prompt Library
+              {loadingPrompts && <span className="ml-1 text-[10px] lowercase text-muted-foreground"> loading…</span>}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl text-xs"
+              onClick={onCreatePrompt}
+              disabled={loadingPrompts}
+            >
+              <Sparkles className="mr-2 h-4 w-4" /> New
+            </Button>
+          </SidebarGroupLabel>
+          <SidebarGroupContent className="space-y-2">
+            {prompts.map((prompt) => (
+              <SidebarPromptRow
+                key={prompt.id}
+                prompt={prompt}
+                active={activePromptId === prompt.id}
+                onSelect={() => onSelectPrompt(prompt.id)}
+                onRename={(name) => onRenamePrompt(prompt.id, name)}
+                onDelete={() => onDeletePrompt(prompt.id)}
+                onDuplicate={() => onDuplicatePrompt(prompt.id)}
+                disableDelete={prompts.length <= 1}
+              />
+            ))}
+            {prompts.length === 0 && (
+              <div className="px-1 text-xs text-muted-foreground">No prompts yet. Add one to get started.</div>
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {activePrompt && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="flex items-center justify-between">
               <Label htmlFor="active-prompt-editor" className="text-xs uppercase tracking-wide text-muted-foreground">
                 Active prompt
               </Label>
-              <Textarea
-                id="active-prompt-editor"
-                value={activePrompt.content}
-                onChange={(e) => onUpdatePromptContent(activePrompt.id, e.target.value)}
-                className="h-[320px] resize-none rounded-2xl border bg-background/60 text-sm"
-                disabled={loadingPrompts}
-              />
-              <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-xl h-7 px-2 text-xs"
+                onClick={() => setShowActivePrompt((prev) => !prev)}
+              >
+                {showActivePrompt ? "Hide" : "Show"}
+              </Button>
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              {showActivePrompt ? (
+                <ScrollArea className="max-h-[420px] pr-1">
+                  <div className="space-y-2 pb-2">
+                    <Textarea
+                      id="active-prompt-editor"
+                      value={activePrompt.content}
+                      onChange={(e) => onUpdatePromptContent(activePrompt.id, e.target.value)}
+                      className="h-[320px] resize-none rounded-2xl border bg-background/60 text-sm"
+                      disabled={loadingPrompts}
+                    />
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => onDuplicatePrompt(activePrompt.id)}
+                        disabled={loadingPrompts}
+                      >
+                        <Copy className="mr-2 h-4 w-4" /> Duplicate
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={() => onResetPrompt(activePrompt.id)}
+                        disabled={loadingPrompts}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl"
+                        onClick={async () => {
+                          if (typeof navigator === "undefined" || !navigator.clipboard) {
+                            console.warn("Clipboard API is unavailable in this environment");
+                            return;
+                          }
+                          try {
+                            await navigator.clipboard.writeText(activePrompt.content);
+                            setCopied(true);
+                            if (copyTimer.current) {
+                              clearTimeout(copyTimer.current);
+                            }
+                            copyTimer.current = setTimeout(() => setCopied(false), 2000);
+                          } catch (err) {
+                            console.error("Failed to copy prompt", err);
+                          }
+                        }}
+                        disabled={loadingPrompts}
+                      >
+                        <Copy className="mr-2 h-4 w-4" /> Copy
+                      </Button>
+                    </div>
+                    {copied && <div className="text-[11px] text-right text-muted-foreground">Prompt copied to clipboard</div>}
+                  </div>
+                </ScrollArea>
+              ) : (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="rounded-xl"
-                  onClick={() => onDuplicatePrompt(activePrompt.id)}
-                  disabled={loadingPrompts}
+                  className="w-full rounded-xl"
+                  onClick={() => setShowActivePrompt(true)}
                 >
-                  <Copy className="mr-2 h-4 w-4" /> Duplicate
+                  Expand prompt
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={() => onResetPrompt(activePrompt.id)}
-                  disabled={loadingPrompts}
-                >
-                  Reset
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={async () => {
-                    if (typeof navigator === "undefined" || !navigator.clipboard) {
-                      console.warn("Clipboard API is unavailable in this environment");
-                      return;
-                    }
-                    try {
-                      await navigator.clipboard.writeText(activePrompt.content);
-                      setCopied(true);
-                      if (copyTimer.current) {
-                        clearTimeout(copyTimer.current);
-                      }
-                      copyTimer.current = setTimeout(() => setCopied(false), 2000);
-                    } catch (err) {
-                      console.error("Failed to copy prompt", err);
-                    }
-                  }}
-                  disabled={loadingPrompts}
-                >
-                  <Copy className="mr-2 h-4 w-4" /> Copy
-                </Button>
-              </div>
-              {copied && <div className="text-[11px] text-right text-muted-foreground">Prompt copied to clipboard</div>}
-            </div>
-          </ScrollArea>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+      <SidebarFooter className="pt-4">
+        <div className="px-2 text-[11px] text-muted-foreground">
+          v1.0 · Shadcn UI · Tailwind
         </div>
-      )}
-      <Separator className="my-6" />
-      <div className="px-3 text-xs text-muted-foreground">
-        v1.0 · Shadcn UI · Tailwind
-      </div>
-    </div>
+      </SidebarFooter>
+    </UiSidebar>
   );
 }
 
@@ -724,21 +785,21 @@ function SidebarListRow({
         <>
           <Button
             variant={active ? "secondary" : "ghost"}
-            size="lg"
+            size="sm"
             className={cx(
-              "flex-1 justify-start gap-3 rounded-xl text-base min-w-0",
+              "flex-1 justify-start gap-2 rounded-xl text-sm min-w-0",
               active && "shadow"
             )}
             onClick={onSelect}
           >
-            <Folder className="h-6 w-6 flex-shrink-0" />
+            <Folder className="h-5 w-5 flex-shrink-0" />
             <span className="truncate">{list.name}</span>
           </Button>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Rename list"
               onClick={() => setEditing(true)}
             >
@@ -747,7 +808,7 @@ function SidebarListRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Delete list"
               onClick={onRemove}
             >
@@ -764,14 +825,14 @@ function SidebarListRow({
               if (e.key === "Enter") commit();
               if (e.key === "Escape") cancel();
             }}
-            className="rounded-xl flex-1"
+            className="rounded-xl flex-1 text-sm"
             autoFocus
           />
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="secondary"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Save name"
               onClick={commit}
             >
@@ -780,7 +841,7 @@ function SidebarListRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Cancel rename"
               onClick={cancel}
             >
@@ -836,18 +897,18 @@ function SidebarPromptRow({
         <>
           <Button
             variant={active ? "secondary" : "ghost"}
-            size="lg"
-            className={cx("flex-1 justify-start gap-3 rounded-xl text-base min-w-0", active && "shadow")}
+            size="sm"
+            className={cx("flex-1 justify-start gap-2 rounded-xl text-sm min-w-0", active && "shadow")}
             onClick={onSelect}
           >
-            <AlignLeft className="h-6 w-6 flex-shrink-0" />
+            <AlignLeft className="h-5 w-5 flex-shrink-0" />
             <span className="truncate">{prompt.name}</span>
           </Button>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Duplicate prompt"
               onClick={onDuplicate}
             >
@@ -856,7 +917,7 @@ function SidebarPromptRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Rename prompt"
               onClick={() => setEditing(true)}
             >
@@ -865,7 +926,7 @@ function SidebarPromptRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Delete prompt"
               onClick={onDelete}
               disabled={disableDelete}
@@ -883,14 +944,14 @@ function SidebarPromptRow({
               if (e.key === "Enter") commit();
               if (e.key === "Escape") cancel();
             }}
-            className="rounded-xl flex-1"
+            className="rounded-xl flex-1 text-sm"
             autoFocus
           />
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="secondary"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Save prompt name"
               onClick={commit}
             >
@@ -899,7 +960,7 @@ function SidebarPromptRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-8 w-8"
+              className="rounded-xl h-7 w-7"
               aria-label="Cancel rename"
               onClick={cancel}
             >
@@ -916,6 +977,7 @@ function Topbar() {
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
       <div className="flex items-center gap-2">
+        <SidebarTrigger className="md:hidden rounded-xl" />
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1181,16 +1243,24 @@ function EnrichScreen({
   const [showLinkedInCard, setShowLinkedInCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {showLinkedInCard && (
-        <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-center justify-between">
+      {showLinkedInCard ? (
+        <Card className="rounded-2xl lg:col-span-3 flex flex-col max-h-[calc(100vh-220px)]">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <CardTitle>LinkedIn Enrichment</CardTitle>
               <CardDescription>
                 Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
               </CardDescription>
             </div>
-            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowLinkedInCard(false)}>Delete</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl self-end sm:self-auto"
+              aria-label="Hide LinkedIn enrichment card"
+              onClick={() => setShowLinkedInCard(false)}
+            >
+              Hide
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4 overflow-auto">
           <Table>
@@ -1284,22 +1354,20 @@ function EnrichScreen({
           </Button>
           </CardFooter>
         </Card>
+      ) : (
+        <Card className="rounded-2xl lg:col-span-3 flex flex-col items-center justify-center gap-4 p-6 text-center max-h-[calc(100vh-220px)]">
+          <CardHeader className="items-center text-center">
+            <CardTitle>LinkedIn Enrichment hidden</CardTitle>
+            <CardDescription>Restore this panel to manage LinkedIn URLs for your leads.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-3 pt-0">
+            <Button className="rounded-xl" variant="outline" onClick={() => setShowLinkedInCard(true)}>
+              Restore section
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
-      <Card className="rounded-2xl">
-        <CardHeader>
-          <CardTitle>How matching works</CardTitle>
-          <CardDescription>Human-in-the-loop enrichment</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p>
-            We generate search links using the uploaded CSV fields: first name, last name, company name, and company URL. Use these to find the correct LinkedIn profile and paste the URL to attach it to the lead.
-          </p>
-          <p>
-            This demo does not call LinkedIn APIs. In production, integrate a compliant people search provider or your internal enrichment service.
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -1779,12 +1847,22 @@ function SendScreen({
   const [showComplianceCard, setShowComplianceCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {showBatchCard && (
+      {showBatchCard ? (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Batch Sending</CardTitle>
-            <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
-            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowBatchCard(false)}>Delete</Button>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle>Batch Sending</CardTitle>
+              <CardDescription>Send approved emails in small batches to protect sender reputation.</CardDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl self-end sm:self-auto"
+              aria-label="Hide batch sending card"
+              onClick={() => setShowBatchCard(false)}
+            >
+              Hide
+            </Button>
           </CardHeader>
           <CardContent className="overflow-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1858,14 +1936,36 @@ function SendScreen({
           </div>
           </CardContent>
         </Card>
+      ) : (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col items-center justify-center gap-4 p-6 text-center max-h-[calc(100vh-220px)]">
+          <CardHeader className="items-center text-center">
+            <CardTitle>Batch Sending hidden</CardTitle>
+            <CardDescription>Restore this panel to configure sending cadence.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-3 pt-0">
+            <Button className="rounded-xl" variant="outline" onClick={() => setShowBatchCard(true)}>
+              Restore section
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
-      {showComplianceCard && (
+      {showComplianceCard ? (
         <Card className="rounded-2xl flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Compliance</CardTitle>
-            <CardDescription>Deliverability & opt-out</CardDescription>
-            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowComplianceCard(false)}>Delete</Button>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <CardTitle>Compliance</CardTitle>
+              <CardDescription>Deliverability & opt-out</CardDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl self-end sm:self-auto"
+              aria-label="Hide compliance card"
+              onClick={() => setShowComplianceCard(false)}
+            >
+              Hide
+            </Button>
           </CardHeader>
           <CardContent className="overflow-auto space-y-3">
           <div className="flex items-center justify-between rounded-xl border p-3">
@@ -1884,6 +1984,18 @@ function SendScreen({
             <Input placeholder="mailer.salesmatter.co" className="rounded-xl" />
             <div className="text-xs text-muted-foreground">Remember to set up SPF, DKIM, DMARC.</div>
           </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="rounded-2xl flex flex-col items-center justify-center gap-4 p-6 text-center max-h-[calc(100vh-220px)]">
+          <CardHeader className="items-center text-center">
+            <CardTitle>Compliance panel hidden</CardTitle>
+            <CardDescription>Restore to manage unsubscribe and domain settings.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-3 pt-0">
+            <Button className="rounded-xl" variant="outline" onClick={() => setShowComplianceCard(true)}>
+              Restore section
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -2037,14 +2149,22 @@ function SettingsScreen() {
   const [showSmtpCard, setShowSmtpCard] = useState(true);
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {showSmtpCard && (
+      {showSmtpCard ? (
         <Card className="rounded-2xl lg:col-span-2 flex flex-col max-h-[calc(100vh-220px)]">
-          <CardHeader className="flex flex-row items-start justify-between">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div>
               <CardTitle>SMTP & Provider</CardTitle>
               <CardDescription>Credentials are stored securely.</CardDescription>
             </div>
-            <Button variant="destructive" size="sm" className="rounded-xl" onClick={() => setShowSmtpCard(false)}>Delete</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl self-end sm:self-auto"
+              aria-label="Hide SMTP settings card"
+              onClick={() => setShowSmtpCard(false)}
+            >
+              Hide
+            </Button>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-auto">
           <div className="grid gap-2">
@@ -2076,6 +2196,18 @@ function SettingsScreen() {
               </SelectContent>
             </Select>
           </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="rounded-2xl lg:col-span-2 flex flex-col items-center justify-center gap-4 p-6 text-center max-h-[calc(100vh-220px)]">
+          <CardHeader className="items-center text-center">
+            <CardTitle>SMTP settings hidden</CardTitle>
+            <CardDescription>Restore this panel to manage provider credentials.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-3 pt-0">
+            <Button className="rounded-xl" variant="outline" onClick={() => setShowSmtpCard(true)}>
+              Restore section
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -2165,8 +2297,12 @@ export default function SalesAutomationUI() {
       const data = await response.json().catch(() => ({ ok: false }));
 
       if (!response.ok || data?.ok === false) {
-        if (data?.error?.includes('Supabase not configured')) {
+        const message = typeof data?.error === 'string' ? data.error : response.statusText;
+        if (data?.error?.includes('Supabase not configured') || response.status >= 500) {
           setSupabaseAvailable(false);
+        }
+        if (message) {
+          console.warn('Prompt sync disabled:', message);
         }
         setPrompts(DEFAULT_PROMPTS);
         setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
@@ -2201,10 +2337,10 @@ export default function SalesAutomationUI() {
     } finally {
       setLoadingPrompts(false);
     }
-  }, [isSupabaseEnvConfigured]);
+  }, [isSupabaseEnvConfigured, setSupabaseAvailable]);
 
   const persistLeadList = useCallback(async (listId: string, update: { name?: string; leads?: Lead[] }) => {
-    if (!supabaseAvailable || !listId) return;
+    if (!supabaseAvailable || !listId || !isUuid(listId)) return;
 
     const payload: Record<string, unknown> = {};
     if (update.name !== undefined) payload.name = update.name;
@@ -2218,12 +2354,18 @@ export default function SalesAutomationUI() {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        console.error('Failed to sync lead list', error?.error ?? response.statusText);
+        if (response.status >= 500) {
+          setSupabaseAvailable(false);
+        }
+        console.error('Failed to sync lead list', error?.error ?? response.statusText, error?.code ? { code: error.code, details: error.details } : undefined);
+        if (response.status >= 500 && error?.error) {
+          console.warn('Lead list sync disabled:', error.error);
+        }
       }
     } catch (error) {
       console.error('Failed to sync lead list', error);
     }
-  }, [supabaseAvailable]);
+  }, [supabaseAvailable, setSupabaseAvailable]);
 
   const syncLeadListLeads = useCallback((nextLeads: Lead[], listId: string | null | undefined) => {
     if (!listId) return;
@@ -2279,8 +2421,12 @@ export default function SalesAutomationUI() {
 
       if (!response.ok || data?.ok === false) {
         resetToSampleLeadList();
-        if (data?.error?.includes('Supabase not configured')) {
+        const message = typeof data?.error === 'string' ? data.error : response.statusText;
+        if (data?.error?.includes('Supabase not configured') || response.status >= 500) {
           setSupabaseAvailable(false);
+        }
+        if (message) {
+          console.warn('Lead list sync disabled:', message);
         }
         return;
       }
@@ -2315,7 +2461,7 @@ export default function SalesAutomationUI() {
     } finally {
       setLoadingLeadLists(false);
     }
-  }, [isSupabaseEnvConfigured, resetToSampleLeadList, updateLeads]);
+  }, [isSupabaseEnvConfigured, resetToSampleLeadList, setSupabaseAvailable, updateLeads]);
 
   useEffect(() => {
     fetchPrompts();
@@ -2332,6 +2478,13 @@ export default function SalesAutomationUI() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || data?.ok === false || !data?.data) {
+        if (response.status >= 500) {
+          setSupabaseAvailable(false);
+          const message = typeof data?.error === 'string' ? data.error : response.statusText;
+          if (message) {
+            console.warn('Lead list creation disabled:', message);
+          }
+        }
         return null;
       }
       const created = data.data;
@@ -2344,7 +2497,7 @@ export default function SalesAutomationUI() {
       console.error('Failed to create lead list remotely', error);
       return null;
     }
-  }, [supabaseAvailable]);
+  }, [supabaseAvailable, setSupabaseAvailable]);
 
   const deleteLeadListRemote = useCallback(async (id: string) => {
     if (!supabaseAvailable) return;
@@ -2896,11 +3049,16 @@ export default function SalesAutomationUI() {
     setStep(map[section] ?? 0);
   }, [section]);
 
-return (
-  <WorkspaceProvider>
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">
-      <div className="flex">
-        <Sidebar
+  return (
+    <WorkspaceProvider>
+      <SidebarProvider
+        className="bg-gradient-to-b from-background to-muted/30"
+        style={{
+          "--sidebar-width": "18.4rem",
+          "--sidebar-width-mobile": "20.7rem",
+        } as React.CSSProperties}
+      >
+        <AppSidebar
           current={section}
           onChange={setSection}
           lists={leadLists}
@@ -2922,9 +3080,9 @@ return (
           loadingPrompts={loadingPrompts}
           loadingLeadLists={loadingLeadLists}
         />
-        <div className="flex-1">
+        <SidebarInset className="bg-gradient-to-b from-background to-muted/30 flex min-h-svh flex-col">
           <Topbar />
-          <main className="p-4 space-y-4">
+          <main className="flex-1 overflow-auto px-6 py-6 space-y-6 md:px-8">
             {section !== 'preview' && <Stepper step={step} onStep={setStep} />}
 
             {section === "import" && (
@@ -2938,7 +3096,11 @@ return (
             )}
 
             {section === "enrich" && (
-              <EnrichScreen leads={leads} onSetLinkedIn={setLinkedInForLead} onBulkMarkEnriched={bulkMarkEnriched} />
+              <EnrichScreen
+                leads={leads}
+                onSetLinkedIn={setLinkedInForLead}
+                onBulkMarkEnriched={bulkMarkEnriched}
+              />
             )}
 
             {section === "generate" && (
@@ -2970,7 +3132,12 @@ return (
             )}
 
             {section === "review" && (
-              <ReviewScreen leads={leads} emails={emails} onApprove={handleApprove} onEdit={handleEdit} />
+              <ReviewScreen
+                leads={leads}
+                emails={emails}
+                onApprove={handleApprove}
+                onEdit={handleEdit}
+              />
             )}
 
             {section === "send" && (
@@ -2990,12 +3157,12 @@ return (
             {section === "analytics" && <AnalyticsScreen />}
 
             {section === "settings" && <SettingsScreen />}
-
           </main>
-        </div>
-      </div>
-      <FooterSection />
-    </div>
-  </WorkspaceProvider>
-);
+          <div className="sticky bottom-0 left-0 w-full">
+            <FooterSection />
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </WorkspaceProvider>
+  );
 }
