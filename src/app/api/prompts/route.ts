@@ -1,6 +1,27 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+type PromptTemplateRow = {
+  id: string;
+  name: string;
+  goal?: string | null;
+  audience?: string | null;
+  channel?: string | null;
+  created_at: string;
+};
+
+type PromptVersionRow = {
+  id: string;
+  template_id: string;
+  version: number;
+  label: string;
+  body: string;
+  created_at: string;
+  author?: string | null;
+  notes?: string | null;
+  status?: string | null;
+};
+
 // GET /api/prompts -> list prompts with versions
 export async function GET() {
   try {
@@ -24,7 +45,7 @@ export async function GET() {
     if (templatesError) throw templatesError;
 
     // Get all versions for these templates
-    const templateIds = templates?.map((t: any) => t.id) || [];
+    const templateIds = (templates as PromptTemplateRow[] | null)?.map((t) => t.id) || [];
     const { data: versions, error: versionsError } = await supabase
       .from('prompt_versions')
       .select('*')
@@ -34,14 +55,14 @@ export async function GET() {
     if (versionsError) throw versionsError;
 
     // Group versions by template
-    const versionsByTemplate = (versions || []).reduce((acc: Record<string, any[]>, version: any) => {
+    const versionsByTemplate = ((versions as PromptVersionRow[] | null) || []).reduce<Record<string, PromptVersionRow[]>>((acc, version) => {
       if (!acc[version.template_id]) acc[version.template_id] = [];
       acc[version.template_id].push(version);
       return acc;
-    }, {} as Record<string, any[]>);
+    }, {});
 
     // Combine templates with their versions
-    const prompts = (templates || []).map((template: any) => ({
+    const prompts = ((templates as PromptTemplateRow[] | null) || []).map((template) => ({
       id: template.id,
       name: template.name,
       tags: [], // We'll add tags to templates later if needed
@@ -51,8 +72,9 @@ export async function GET() {
     }));
 
     return NextResponse.json({ ok: true, data: prompts });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
@@ -106,11 +128,12 @@ export async function POST(req: Request) {
       tags: [],
       createdAt: template.created_at,
       updatedAt: template.created_at,
-      versions: [version]
+      versions: [version as PromptVersionRow]
     };
 
     return NextResponse.json({ ok: true, data: prompt }, { status: 201 });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

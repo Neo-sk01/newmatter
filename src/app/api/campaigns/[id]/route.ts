@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 // GET /api/campaigns/[id] -> get campaign by id
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
     
     const { data: campaign, error } = await supabase
       .from('campaigns')
@@ -46,10 +49,13 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 }
 
 // PATCH /api/campaigns/[id] -> update campaign { name?, promptSelections? }
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
     const body = await req.json();
     const { name, promptSelections } = body;
 
@@ -127,10 +133,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 // DELETE /api/campaigns/[id] -> delete campaign (soft delete by setting status to archived)
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
 
     const { data: deleted, error } = await supabase
       .from('campaigns')

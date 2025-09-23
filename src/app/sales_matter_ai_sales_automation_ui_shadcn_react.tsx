@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import Papa from "papaparse";
 import {
   Card,
@@ -51,6 +51,7 @@ import { Logo } from "@/components/logo";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import FooterSection from "@/components/footer-section";
+import { HydrationSafeThemeToggle } from "@/components/HydrationSafeThemeToggle";
 import { format } from "date-fns";
 import {
   AlignLeft,
@@ -62,6 +63,7 @@ import {
   Sparkles,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CloudUpload,
   Database,
@@ -81,15 +83,12 @@ import {
   StopCircle,
   Upload,
   Users2,
-  Sun,
-  Moon,
   Linkedin,
   Trash2,
   FolderPlus,
   Folder,
   X,
 } from "lucide-react";
-import { useTheme } from "next-themes";
 import {
   Area,
   AreaChart,
@@ -167,6 +166,18 @@ const initialLeads: Lead[] = [
 ];
 
 // Chart data is now fetched dynamically from SendGrid API
+
+const DEFAULT_LEAD_LIST: LeadList = {
+  id: 'default',
+  name: 'Sample Leads',
+  leads: initialLeads,
+};
+
+const cloneDefaultLeadList = (): LeadList => ({
+  id: DEFAULT_LEAD_LIST.id,
+  name: DEFAULT_LEAD_LIST.name,
+  leads: DEFAULT_LEAD_LIST.leads.map((lead) => ({ ...lead })),
+});
 
 // Default prompt library seeded with the provided few-shot instructions
 const DEFAULT_PROMPT_CONTENT = `### **Few-Shot Prompt for AI Agent**
@@ -276,12 +287,75 @@ const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolea
 
 const createPromptId = () => `prompt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
+const leadStatuses: Lead['status'][] = ['new', 'enriched', 'generated', 'approved', 'rejected', 'sent'];
+
+const normalizeLeadStatus = (status: unknown): Lead['status'] =>
+  leadStatuses.includes(status as Lead['status']) ? (status as Lead['status']) : 'new';
+
+type ApiLeadInput = {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  email?: string;
+  title?: string;
+  website?: string;
+  linkedin?: string;
+  status?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+};
+
+const mapApiLeadToLocal = (lead: ApiLeadInput): Lead => ({
+  id: lead.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  firstName: lead.firstName ?? lead.first_name ?? '',
+  lastName: lead.lastName ?? lead.last_name ?? '',
+  company: lead.company ?? '',
+  email: lead.email ?? '',
+  title: lead.title ?? '',
+  website: lead.website ?? undefined,
+  linkedin: lead.linkedin ?? undefined,
+  status: normalizeLeadStatus(lead.status),
+});
+
+const mapLocalLeadToApi = (lead: Lead) => ({
+  id: lead.id,
+  firstName: lead.firstName,
+  lastName: lead.lastName,
+  company: lead.company,
+  email: lead.email,
+  title: lead.title,
+  website: lead.website,
+  linkedin: lead.linkedin,
+  status: lead.status,
+});
+
+type PromptApiPayload = {
+  id: string;
+  name: string;
+  versions?: Array<{ body?: string | null }>;
+};
+
+type LeadListApiPayload = {
+  id: string;
+  name: string;
+  leads?: ApiLeadInput[];
+};
+
 // Apply LLM-provided mapping rules to a CSV row
 function applyMapping(
-  row: Record<string, any>,
+  row: Record<string, unknown>,
   headerMapping: Record<string, string>,
   rules?: { splitFullName?: { column: string; firstNameFirst?: boolean } }
-) {
+): {
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  email?: string;
+  title?: string | null;
+  website?: string | null;
+  linkedin?: string | null;
+} {
   const out: {
     firstName?: string;
     lastName?: string;
@@ -293,9 +367,11 @@ function applyMapping(
   } = {};
 
   const get = (k: string) => {
-    const v = row[k];
-    if (v == null) return "";
-    return String(v).trim();
+    const value = row[k];
+    if (value == null) return "";
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    return "";
   };
 
   const normalizeUrl = (v: string) => {
@@ -407,6 +483,8 @@ function Sidebar({
   onRenamePrompt,
   onUpdatePromptContent,
   onResetPrompt,
+  loadingPrompts,
+  loadingLeadLists,
 }: {
   current: string;
   onChange: (v: string) => void;
@@ -426,6 +504,8 @@ function Sidebar({
   onRenamePrompt: (id: string, name: string) => void;
   onUpdatePromptContent: (id: string, content: string) => void;
   onResetPrompt: (id: string) => void;
+  loadingPrompts: boolean;
+  loadingLeadLists: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -480,8 +560,16 @@ function Sidebar({
       </nav>
       <Separator className="my-6" />
       <div className="px-3 flex items-center justify-between mb-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Lead Lists</div>
-        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onNewList}>
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Lead Lists {loadingLeadLists && <span className="ml-1 text-[10px] lowercase">syncing…</span>}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-xl"
+          onClick={onNewList}
+          disabled={loadingLeadLists}
+        >
           <FolderPlus className="mr-2 h-4 w-4" /> New
         </Button>
       </div>
@@ -502,8 +590,16 @@ function Sidebar({
       </div>
       <Separator className="my-6" />
       <div className="px-3 flex items-center justify-between mb-2">
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Prompt Library</div>
-        <Button variant="ghost" size="sm" className="rounded-xl" onClick={onCreatePrompt}>
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Prompt Library {loadingPrompts && <span className="ml-1 text-[10px] lowercase">loading…</span>}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="rounded-xl"
+          onClick={onCreatePrompt}
+          disabled={loadingPrompts}
+        >
           <Sparkles className="mr-2 h-4 w-4" /> New
         </Button>
       </div>
@@ -536,6 +632,7 @@ function Sidebar({
                 value={activePrompt.content}
                 onChange={(e) => onUpdatePromptContent(activePrompt.id, e.target.value)}
                 className="h-[320px] resize-none rounded-2xl border bg-background/60 text-sm"
+                disabled={loadingPrompts}
               />
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button
@@ -543,6 +640,7 @@ function Sidebar({
                   size="sm"
                   className="rounded-xl"
                   onClick={() => onDuplicatePrompt(activePrompt.id)}
+                  disabled={loadingPrompts}
                 >
                   <Copy className="mr-2 h-4 w-4" /> Duplicate
                 </Button>
@@ -551,6 +649,7 @@ function Sidebar({
                   size="sm"
                   className="rounded-xl"
                   onClick={() => onResetPrompt(activePrompt.id)}
+                  disabled={loadingPrompts}
                 >
                   Reset
                 </Button>
@@ -574,6 +673,7 @@ function Sidebar({
                       console.error("Failed to copy prompt", err);
                     }
                   }}
+                  disabled={loadingPrompts}
                 >
                   <Copy className="mr-2 h-4 w-4" /> Copy
                 </Button>
@@ -813,8 +913,6 @@ function SidebarPromptRow({
 }
 
 function Topbar() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const isDark = (resolvedTheme ?? theme) === "dark";
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
       <div className="flex items-center gap-2">
@@ -833,21 +931,7 @@ function Topbar() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-xl"
-                onClick={() => setTheme(isDark ? "light" : "dark")}
-              >
-                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{isDark ? "Light mode" : "Dark mode"}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <HydrationSafeThemeToggle className="rounded-xl" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="rounded-xl">
@@ -1257,9 +1341,59 @@ function GenerateScreen({
   };
 
   const preview = previewFor(selected);
+  const totalLeads = leads.length;
+  const draftedCount = useMemo(() => {
+    const statusesWithEmail: Array<Lead['status']> = ["generated", "approved", "rejected", "sent"];
+    return leads.reduce((count, lead) => {
+      const email = emails[lead.id];
+      const hasEmailContent = Boolean(email?.subject?.trim() || email?.body?.trim());
+      return hasEmailContent || statusesWithEmail.includes(lead.status) ? count + 1 : count;
+    }, 0);
+  }, [leads, emails]);
+  const draftProgress = totalLeads > 0 ? Math.round((draftedCount / totalLeads) * 100) : 0;
+  const selectedIndex = useMemo(() => {
+    if (!selected) return -1;
+    return leads.findIndex((lead) => lead.id === selected.id);
+  }, [leads, selected]);
+  const handleNextLead = useCallback(() => {
+    if (!leads.length) return;
+    if (!selected) {
+      setSelectedLeadId(leads[0]?.id ?? null);
+      return;
+    }
+    const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    const nextIndex = (currentIndex + 1) % leads.length;
+    setSelectedLeadId(leads[nextIndex].id);
+  }, [leads, selected, selectedIndex, setSelectedLeadId]);
+  const handlePreviousLead = useCallback(() => {
+    if (!leads.length) return;
+    if (!selected) {
+      setSelectedLeadId(leads[0]?.id ?? null);
+      return;
+    }
+    const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
+    const prevIndex = (currentIndex - 1 + leads.length) % leads.length;
+    setSelectedLeadId(leads[prevIndex].id);
+  }, [leads, selected, selectedIndex, setSelectedLeadId]);
 
   return (
     <div className="grid gap-4">
+      <Card className="rounded-2xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Generation Progress</CardTitle>
+          <CardDescription>Track drafted emails across this list.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span>
+              {totalLeads > 0 ? `${draftedCount} of ${totalLeads} leads drafted` : 'No leads imported yet'}
+            </span>
+            <span className="text-muted-foreground">{draftProgress}%</span>
+          </div>
+          <Progress value={draftProgress} className="h-2" />
+        </CardContent>
+      </Card>
+
       <Card className="rounded-2xl">
         <CardHeader>
           <CardTitle>Preview</CardTitle>
@@ -1294,12 +1428,37 @@ function GenerateScreen({
                       </>
                     )}
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={handlePreviousLead}
+                    disabled={totalLeads <= 1}
+                  >
+                    <ChevronLeft className="mr-2 h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl"
+                    onClick={handleNextLead}
+                    disabled={totalLeads <= 1}
+                  >
+                    Next
+                    <ChevronRight className="ml-2 h-4 w-4" />
+                  </Button>
                   {generateError && selected && (
                     <span className="text-xs text-destructive">
                       {generateError}
                     </span>
                   )}
                 </div>
+                {selectedIndex >= 0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Viewing lead {selectedIndex + 1} of {totalLeads}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -1960,13 +2119,12 @@ export default function SalesAutomationUI() {
   const [section, setSection] = useState<string>("import");
   const [step, setStep] = useState<number>(0);
   // Lead lists (folders) and active list selection
-  const defaultListId = "default";
-  const [leadLists, setLeadLists] = useState<LeadList[]>([
-    { id: defaultListId, name: "Sample Leads", leads: initialLeads },
-  ]);
+  const isSupabaseEnvConfigured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  const defaultListId = DEFAULT_LEAD_LIST.id;
+  const [leadLists, setLeadLists] = useState<LeadList[]>([cloneDefaultLeadList()]);
   const [currentListId, setCurrentListId] = useState<string>(defaultListId);
   // Local working set mirrors the active list
-  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [leads, setLeads] = useState<Lead[]>(() => initialLeads.map((lead) => ({ ...lead })));
   // LinkedIn enrichment flow replaces generic enrichment toggles
   const [template, setTemplate] = useState<string>(
     `Hi {{firstName}},\n\nI came across {{company}} and noticed your work in {{title}}. We help teams like yours automate outbound so you get more replies with fewer sends.\n\nWould you be open to a quick chat this week?\n\nBest,\nNeo\n`
@@ -1982,6 +2140,9 @@ export default function SalesAutomationUI() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [prompts, setPrompts] = useState<PromptConfig[]>(DEFAULT_PROMPTS);
   const [activePromptId, setActivePromptId] = useState<string>(DEFAULT_PROMPTS[0]?.id ?? "");
+  const [supabaseAvailable, setSupabaseAvailable] = useState(isSupabaseEnvConfigured);
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [loadingLeadLists, setLoadingLeadLists] = useState(false);
 
   const activePrompt = useMemo(() => {
     if (prompts.length === 0) {
@@ -1990,43 +2151,351 @@ export default function SalesAutomationUI() {
     return prompts.find((p) => p.id === activePromptId) ?? prompts[0];
   }, [prompts, activePromptId]);
 
-  const handlePromptContentChange = (id: string, content: string) => {
-    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content } : prompt)));
-  };
+  const fetchPrompts = useCallback(async () => {
+    if (!isSupabaseEnvConfigured) {
+      setSupabaseAvailable(false);
+      setPrompts(DEFAULT_PROMPTS);
+      setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
+      return;
+    }
 
-  const handlePromptNameChange = (id: string, name: string) => {
+    setLoadingPrompts(true);
+    try {
+      const response = await fetch("/api/prompts");
+      const data = await response.json().catch(() => ({ ok: false }));
+
+      if (!response.ok || data?.ok === false) {
+        if (data?.error?.includes('Supabase not configured')) {
+          setSupabaseAvailable(false);
+        }
+        setPrompts(DEFAULT_PROMPTS);
+        setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
+        return;
+      }
+
+      const fetched: PromptApiPayload[] = Array.isArray(data?.data) ? (data.data as PromptApiPayload[]) : [];
+      if (!fetched.length) {
+        setPrompts(DEFAULT_PROMPTS);
+        setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
+        return;
+      }
+
+      const mapped: PromptConfig[] = fetched.map((prompt) => {
+        const versions = Array.isArray(prompt.versions) ? prompt.versions : [];
+        const latest = versions.at(-1);
+        return {
+          id: prompt.id,
+          name: prompt.name,
+          content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : DEFAULT_PROMPT_CONTENT,
+        };
+      });
+
+      setPrompts(mapped);
+      setActivePromptId(mapped[0]?.id ?? DEFAULT_PROMPTS[0]?.id ?? "");
+      setSupabaseAvailable(true);
+    } catch (error) {
+      console.error('Failed to load prompts', error);
+      setSupabaseAvailable(false);
+      setPrompts(DEFAULT_PROMPTS);
+      setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
+    } finally {
+      setLoadingPrompts(false);
+    }
+  }, [isSupabaseEnvConfigured]);
+
+  const persistLeadList = useCallback(async (listId: string, update: { name?: string; leads?: Lead[] }) => {
+    if (!supabaseAvailable || !listId) return;
+
+    const payload: Record<string, unknown> = {};
+    if (update.name !== undefined) payload.name = update.name;
+    if (update.leads) payload.leads = update.leads.map(mapLocalLeadToApi);
+
+    try {
+      const response = await fetch(`/api/leadlists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to sync lead list', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to sync lead list', error);
+    }
+  }, [supabaseAvailable]);
+
+  const syncLeadListLeads = useCallback((nextLeads: Lead[], listId: string | null | undefined) => {
+    if (!listId) return;
+
+    setLeadLists((prev) => {
+      let changed = false;
+      const updated = prev.map((lst) => {
+        if (lst.id !== listId) return lst;
+        if (lst.leads === nextLeads) return lst;
+        changed = true;
+        return { ...lst, leads: nextLeads };
+      });
+      return changed ? updated : prev;
+    });
+
+    if (supabaseAvailable) {
+      persistLeadList(listId, { leads: nextLeads });
+    }
+  }, [persistLeadList, supabaseAvailable]);
+
+  const updateLeads = useCallback(
+    (updater: ((prev: Lead[]) => Lead[]) | Lead[], listId?: string) => {
+      const targetId = listId ?? currentListId;
+      setLeads((prev) => {
+        const next = typeof updater === 'function' ? (updater as (prev: Lead[]) => Lead[])(prev) : updater;
+        if (next === prev) return prev;
+        syncLeadListLeads(next as Lead[], targetId);
+        return next as Lead[];
+      });
+    },
+    [currentListId, syncLeadListLeads]
+  );
+
+  const resetToSampleLeadList = useCallback(() => {
+    const sample = cloneDefaultLeadList();
+    setLeadLists([sample]);
+    setCurrentListId(sample.id);
+    updateLeads(sample.leads, sample.id);
+    setSelectedLeadId(sample.leads[0]?.id ?? null);
+  }, [updateLeads]);
+
+  const fetchLeadLists = useCallback(async () => {
+    if (!isSupabaseEnvConfigured) {
+      setSupabaseAvailable(false);
+      resetToSampleLeadList();
+      return;
+    }
+
+    setLoadingLeadLists(true);
+    try {
+      const response = await fetch("/api/leadlists");
+      const data = await response.json().catch(() => ({ ok: false }));
+
+      if (!response.ok || data?.ok === false) {
+        resetToSampleLeadList();
+        if (data?.error?.includes('Supabase not configured')) {
+          setSupabaseAvailable(false);
+        }
+        return;
+      }
+
+      const fetched: LeadListApiPayload[] = Array.isArray(data?.data) ? (data.data as LeadListApiPayload[]) : [];
+
+      if (!fetched.length) {
+        setLeadLists([]);
+        setCurrentListId("");
+        setLeads([]);
+        setSelectedLeadId(null);
+        return;
+      }
+
+      const mapped: LeadList[] = fetched.map((list) => ({
+        id: list.id,
+        name: list.name,
+        leads: Array.isArray(list.leads) ? list.leads.map(mapApiLeadToLocal) : [],
+      }));
+
+      setLeadLists(mapped);
+      const firstId = mapped[0]?.id ?? "";
+      setCurrentListId(firstId);
+      const firstLeads = mapped.find((lst) => lst.id === firstId)?.leads ?? [];
+      updateLeads(firstLeads, firstId);
+      setSelectedLeadId(firstLeads[0]?.id ?? null);
+      setSupabaseAvailable(true);
+    } catch (error) {
+      console.error('Failed to load lead lists', error);
+      resetToSampleLeadList();
+      setSupabaseAvailable(false);
+    } finally {
+      setLoadingLeadLists(false);
+    }
+  }, [isSupabaseEnvConfigured, resetToSampleLeadList, updateLeads]);
+
+  useEffect(() => {
+    fetchPrompts();
+    fetchLeadLists();
+  }, [fetchPrompts, fetchLeadLists]);
+
+  const createLeadListRemote = useCallback(async (name: string, leadsPayload: Lead[]) => {
+    if (!supabaseAvailable) return null;
+    try {
+      const response = await fetch('/api/leadlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, leads: leadsPayload.map(mapLocalLeadToApi) }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || data?.ok === false || !data?.data) {
+        return null;
+      }
+      const created = data.data;
+      return {
+        id: created.id,
+        name: created.name,
+        leads: Array.isArray(created.leads) ? created.leads.map(mapApiLeadToLocal) : leadsPayload,
+      } as LeadList;
+    } catch (error) {
+      console.error('Failed to create lead list remotely', error);
+      return null;
+    }
+  }, [supabaseAvailable]);
+
+  const deleteLeadListRemote = useCallback(async (id: string) => {
+    if (!supabaseAvailable) return;
+    try {
+      const response = await fetch(`/api/leadlists/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to delete lead list', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to delete lead list', error);
+    }
+  }, [supabaseAvailable]);
+
+  const handlePromptContentChange = useCallback(async (id: string, content: string) => {
+    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content } : prompt)));
+
+    if (!supabaseAvailable) return;
+
+    try {
+      const response = await fetch(`/api/prompts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newContent: content }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to save prompt content', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to save prompt content', error);
+    }
+  }, [supabaseAvailable]);
+
+  const handlePromptNameChange = useCallback(async (id: string, name: string) => {
     const nextName = name.trim();
     if (!nextName) return;
+
     setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, name: nextName } : prompt)));
-  };
 
-  const handleCreatePrompt = () => {
-    const newId = createPromptId();
-    setPrompts((prev) => {
+    if (!supabaseAvailable) return;
+
+    try {
+      const response = await fetch(`/api/prompts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nextName }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to rename prompt', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to rename prompt', error);
+    }
+  }, [supabaseAvailable]);
+
+  const handleCreatePrompt = useCallback(async () => {
+    const provisional: PromptConfig = {
+      id: createPromptId(),
+      name: 'New Prompt',
+      content: 'Describe the tone, structure, and examples you want the assistant to follow.',
+    };
+
+    if (!supabaseAvailable) {
+      setPrompts((prev) => [...prev, provisional]);
+      setActivePromptId(provisional.id);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: provisional.name, content: provisional.content }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || data?.ok === false || !data?.data) {
+        setPrompts((prev) => [...prev, provisional]);
+        setActivePromptId(provisional.id);
+        return;
+      }
+
+      const created = data.data as PromptApiPayload;
+      const versions = Array.isArray(created.versions) ? created.versions : [];
+      const latest = versions.at(-1);
       const newPrompt: PromptConfig = {
-        id: newId,
-        name: `Prompt ${prev.length + 1}`,
-        content: "Describe the tone, structure, and examples you want the assistant to follow.",
+        id: created.id,
+        name: created.name,
+        content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : provisional.content,
       };
-      return [...prev, newPrompt];
-    });
-    setActivePromptId(newId);
-  };
+      setPrompts((prev) => [...prev, newPrompt]);
+      setActivePromptId(newPrompt.id);
+    } catch (error) {
+      console.error('Failed to create prompt', error);
+      setPrompts((prev) => [...prev, provisional]);
+      setActivePromptId(provisional.id);
+    }
+  }, [supabaseAvailable]);
 
-  const handleDuplicatePrompt = (id: string) => {
+  const handleDuplicatePrompt = useCallback(async (id: string) => {
     const source = prompts.find((p) => p.id === id);
     if (!source) return;
-    const newId = createPromptId();
-    const clone: PromptConfig = {
-      id: newId,
+
+    const provisional: PromptConfig = {
+      id: createPromptId(),
       name: `${source.name} Copy`,
       content: source.content,
     };
-    setPrompts((prev) => [...prev, clone]);
-    setActivePromptId(newId);
-  };
 
-  const handleDeletePrompt = (id: string) => {
+    if (!supabaseAvailable) {
+      setPrompts((prev) => [...prev, provisional]);
+      setActivePromptId(provisional.id);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: provisional.name, content: provisional.content }),
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || data?.ok === false || !data?.data) {
+        setPrompts((prev) => [...prev, provisional]);
+        setActivePromptId(provisional.id);
+        return;
+      }
+
+      const created = data.data as PromptApiPayload;
+      const versions = Array.isArray(created.versions) ? created.versions : [];
+      const latest = versions.at(-1);
+      const newPrompt: PromptConfig = {
+        id: created.id,
+        name: created.name,
+        content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : provisional.content,
+      };
+      setPrompts((prev) => [...prev, newPrompt]);
+      setActivePromptId(newPrompt.id);
+    } catch (error) {
+      console.error('Failed to duplicate prompt', error);
+      setPrompts((prev) => [...prev, provisional]);
+      setActivePromptId(provisional.id);
+    }
+  }, [prompts, supabaseAvailable]);
+
+  const handleDeletePrompt = useCallback(async (id: string) => {
     setPrompts((prev) => {
       if (prev.length <= 1) return prev;
       const next = prev.filter((prompt) => prompt.id !== id);
@@ -2036,11 +2505,39 @@ export default function SalesAutomationUI() {
       }
       return next;
     });
-  };
 
-  const handleResetPrompt = (id: string) => {
+    if (!supabaseAvailable) return;
+
+    try {
+      const response = await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to delete prompt', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to delete prompt', error);
+    }
+  }, [activePromptId, supabaseAvailable]);
+
+  const handleResetPrompt = useCallback(async (id: string) => {
     setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content: DEFAULT_PROMPT_CONTENT } : prompt)));
-  };
+
+    if (!supabaseAvailable) return;
+
+    try {
+      const response = await fetch(`/api/prompts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newContent: DEFAULT_PROMPT_CONTENT }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        console.error('Failed to reset prompt', error?.error ?? response.statusText);
+      }
+    } catch (error) {
+      console.error('Failed to reset prompt', error);
+    }
+  }, [supabaseAvailable]);
 
   const handleSelectLeadId = (id: string | null) => {
     setGenerateError(null);
@@ -2057,13 +2554,13 @@ export default function SalesAutomationUI() {
   const onImportCSV = async (file: File) => {
     try {
       // 1) Parse CSV on the client
-      const parsed = await new Promise<Papa.ParseResult<Record<string, any>>>((resolve, reject) => {
-        Papa.parse<Record<string, any>>(file, {
+      const parsed = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
+        Papa.parse<Record<string, unknown>>(file, {
           header: true,
           skipEmptyLines: true,
           transformHeader: (h: string) => String(h || "").trim(),
-          complete: (res: Papa.ParseResult<Record<string, any>>) => resolve(res),
-          error: (err: any) => reject(err),
+          complete: (res: Papa.ParseResult<Record<string, unknown>>) => resolve(res),
+          error: (err: unknown) => reject(err),
         });
       });
 
@@ -2097,8 +2594,8 @@ export default function SalesAutomationUI() {
       }
 
       // 3) Apply the mapping to all rows locally
-      const mapped: Lead[] = rows
-        .map((r: Record<string, any>, idx: number) => {
+      const mapped: Lead[] = (rows as Record<string, unknown>[]) 
+        .map((r, idx) => {
           const normalized = applyMapping(r, headerMapping!, rules);
           const hasAny = Boolean(
             normalized.email ||
@@ -2129,11 +2626,24 @@ export default function SalesAutomationUI() {
 
       // Create a new lead list (folder) for each uploaded file
       const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
-      const newId = `${Date.now()}`;
-      const newList: LeadList = { id: newId, name: base, leads: mapped };
-      setLeadLists((prev) => [...prev, newList]);
-      setCurrentListId(newId);
-      setLeads(mapped);
+      let createdList: LeadList | null = null;
+
+      if (supabaseAvailable) {
+        const remote = await createLeadListRemote(base, mapped);
+        if (remote) {
+          createdList = remote;
+        }
+      }
+
+      if (!createdList) {
+        createdList = { id: `${Date.now()}`, name: base, leads: mapped };
+      }
+
+      const listToAdd = createdList!;
+      setLeadLists((prev) => [...prev, listToAdd]);
+      setCurrentListId(listToAdd.id);
+      updateLeads(listToAdd.leads, listToAdd.id);
+      setSelectedLeadId(listToAdd.leads[0]?.id ?? null);
       setSection("enrich");
     } catch (err) {
       console.error("Import failed", err);
@@ -2145,7 +2655,7 @@ export default function SalesAutomationUI() {
   };
 
   const setLinkedInForLead = (leadId: string, url: string) => {
-    setLeads((prev) =>
+    updateLeads((prev) =>
       prev.map((l) =>
         l.id === leadId
           ? { ...l, linkedin: url || undefined, status: url ? "enriched" : l.status }
@@ -2155,7 +2665,7 @@ export default function SalesAutomationUI() {
   };
 
   const bulkMarkEnriched = () => {
-    setLeads((prev) => prev.map((l) => (l.linkedin ? { ...l, status: "enriched" } : l)));
+    updateLeads((prev) => prev.map((l) => (l.linkedin ? { ...l, status: "enriched" } : l)));
   };
 
   const runGeneration = () => {
@@ -2168,7 +2678,7 @@ export default function SalesAutomationUI() {
       };
     });
     setEmails(map);
-    setLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })));
+    updateLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })));
   };
 
   const generateColdEmailForLead = async (lead: Lead) => {
@@ -2237,7 +2747,7 @@ export default function SalesAutomationUI() {
         },
       }));
 
-      setLeads((prev) =>
+      updateLeads((prev) =>
         prev.map((l) =>
           l.id === lead.id
             ? { ...l, status: "generated" }
@@ -2253,7 +2763,7 @@ export default function SalesAutomationUI() {
   };
 
   const handleApprove = (leadId: string, approved: boolean) => {
-    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: approved ? "approved" : "rejected" } : l)));
+    updateLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status: approved ? "approved" : "rejected" } : l)));
   };
 
   const handleEdit = (leadId: string, value: GeneratedEmail) => {
@@ -2262,28 +2772,17 @@ export default function SalesAutomationUI() {
 
   const approvedCount = leads.filter((l) => l.status === "approved").length;
 
-  // Keep the current list in sync with local leads state
-  useEffect(() => {
-    setLeadLists((prev) => {
-      let changed = false;
-      const next = prev.map((lst) => {
-        if (lst.id !== currentListId) return lst;
-        if (lst.leads === leads) return lst;
-        changed = true;
-        return { ...lst, leads };
-      });
-      return changed ? next : prev;
-    });
-  }, [leads, currentListId]);
-
   // When switching lists, load its leads into local state
-  // Only react to list ID changes to avoid sync loops with the writer effect above.
   useEffect(() => {
     const selected = leadLists.find((l) => l.id === currentListId);
-    if (selected) {
-      setLeads(selected.leads);
-    }
-  }, [currentListId]);
+    if (!selected) return;
+
+    setLeads((prev) => (prev === selected.leads ? prev : selected.leads));
+    setSelectedLeadId((prev) => {
+      if (prev && selected.leads.some((lead) => lead.id === prev)) return prev;
+      return selected.leads[0]?.id ?? null;
+    });
+  }, [currentListId, leadLists]);
 
   // Keep a sensible selection for the minimal preview screen
   useEffect(() => {
@@ -2295,30 +2794,51 @@ export default function SalesAutomationUI() {
   }, [leads, selectedLeadId]);
 
   // Sidebar list actions
-  const newEmptyList = () => {
-    const newId = `${Date.now()}`;
-    const list: LeadList = { id: newId, name: `List ${leadLists.length + 1}`, leads: [] };
-    setLeadLists((prev) => [...prev, list]);
-    setCurrentListId(newId);
-    setLeads([]);
-  };
-  const selectList = (id: string) => setCurrentListId(id);
-  const removeListById = (id: string) => {
-    setLeadLists((prev) => {
-      const filtered = prev.filter((l) => l.id !== id);
-      if (id === currentListId) {
-        const nextId = filtered[0]?.id || "";
-        setCurrentListId(nextId);
-        const nextLeads = filtered.find((l) => l.id === nextId)?.leads || [];
-        setLeads(nextLeads);
+  const newEmptyList = useCallback(async () => {
+    const listName = `List ${leadLists.length + 1}`;
+
+    if (supabaseAvailable) {
+      const remote = await createLeadListRemote(listName, []);
+      if (remote) {
+        setLeadLists((prev) => [...prev, remote]);
+        setCurrentListId(remote.id);
+        updateLeads([], remote.id);
+        setSelectedLeadId(null);
+        return;
       }
-      return filtered;
-    });
-  };
+    }
+
+    const fallbackId = `${Date.now()}`;
+    const fallbackList: LeadList = { id: fallbackId, name: listName, leads: [] };
+    setLeadLists((prev) => [...prev, fallbackList]);
+    setCurrentListId(fallbackId);
+    updateLeads([], fallbackId);
+    setSelectedLeadId(null);
+  }, [leadLists.length, supabaseAvailable, createLeadListRemote, updateLeads]);
+
+  const selectList = (id: string) => setCurrentListId(id);
+
+  const removeListById = useCallback((id: string) => {
+    const filtered = leadLists.filter((l) => l.id !== id);
+    setLeadLists(filtered);
+    deleteLeadListRemote(id);
+
+    if (id === currentListId) {
+      const next = filtered[0];
+      setCurrentListId(next?.id ?? "");
+      if (next) {
+        updateLeads(next.leads, next.id);
+        setSelectedLeadId(next.leads[0]?.id ?? null);
+      } else {
+        setLeads([]);
+        setSelectedLeadId(null);
+      }
+    }
+  }, [leadLists, currentListId, deleteLeadListRemote, updateLeads]);
 
   // Lead removal helpers for ImportScreen
   const removeLead = (leadId: string) => {
-    setLeads((prev) => prev.filter((l) => l.id !== leadId));
+    updateLeads((prev) => prev.filter((l) => l.id !== leadId));
     // Also remove any generated email entry tied to that lead
     setEmails((prev) => {
       const { [leadId]: _, ...rest } = prev;
@@ -2326,13 +2846,16 @@ export default function SalesAutomationUI() {
     });
   };
   const clearLeads = () => {
-    setLeads([]);
+    updateLeads([]);
     setEmails({});
   };
 
-  const renameList = (id: string, name: string) => {
-    setLeadLists((prev) => prev.map((list) => (list.id === id ? { ...list, name } : list)));
-  };
+  const renameList = useCallback((id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setLeadLists((prev) => prev.map((list) => (list.id === id ? { ...list, name: trimmed } : list)));
+    persistLeadList(id, { name: trimmed });
+  }, [persistLeadList]);
 
   // Simulate sending with batches
   useEffect(() => {
@@ -2346,14 +2869,14 @@ export default function SalesAutomationUI() {
         if (sent >= total) {
           if (timer) clearInterval(timer);
           setSending(false);
-          setLeads((prev) => prev.map((l) => (l.status === "approved" ? { ...l, status: "sent" } : l)));
+          updateLeads((prev) => prev.map((l) => (l.status === "approved" ? { ...l, status: "sent" } : l)));
         }
       }, 800);
     }
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [sending, approvedCount, batchSize]);
+  }, [sending, approvedCount, batchSize, updateLeads]);
 
   const startSending = () => {
     if (approvedCount === 0) return;
@@ -2396,6 +2919,8 @@ return (
           onRenamePrompt={handlePromptNameChange}
           onUpdatePromptContent={handlePromptContentChange}
           onResetPrompt={handleResetPrompt}
+          loadingPrompts={loadingPrompts}
+          loadingLeadLists={loadingLeadLists}
         />
         <div className="flex-1">
           <Topbar />
