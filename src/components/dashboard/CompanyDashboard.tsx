@@ -1,21 +1,19 @@
 'use client';
 
 import { useUser } from '@clerk/nextjs';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Users, 
-  Mail, 
-  BarChart3, 
-  Settings, 
-  FileText, 
+import {
+  Users,
+  Mail,
+  BarChart3,
   Download,
   Plus,
   Eye,
-  Edit
+  Edit,
 } from 'lucide-react';
 import { UserMetadata, Permission } from '@/lib/types/auth';
 
@@ -25,27 +23,30 @@ interface CompanyDashboardProps {
 
 export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
   const { user } = useUser();
-  const [companyData, setCompanyData] = useState<any>(null);
+  const [companyData, setCompanyData] = useState<{ name?: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const userMetadata = user?.publicMetadata as unknown as UserMetadata;
 
-  useEffect(() => {
-    // Fetch company-specific data
-    fetchCompanyData();
-  }, [companyId]);
-
-  const fetchCompanyData = async () => {
+  const fetchCompanyData = useCallback(async () => {
     try {
       const response = await fetch(`/api/companies/${companyId}`);
-      const data = await response.json();
-      setCompanyData(data);
+      if (!response.ok) {
+        throw new Error('Failed to fetch company data');
+      }
+      const payload = (await response.json()) as { data?: { name?: string } };
+      setCompanyData(payload.data ?? null);
     } catch (error) {
       console.error('Error fetching company data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    // Fetch company-specific data
+    void fetchCompanyData();
+  }, [fetchCompanyData]);
 
   const hasPermission = (permission: Permission) => {
     return userMetadata?.permissions?.includes(permission) || false;
@@ -70,7 +71,7 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                 {companyData?.name || 'Company Dashboard'}
               </h1>
               <p className="text-gray-600">
-                Welcome back, {user?.firstName}! Here's your company overview.
+                Welcome back, {user?.firstName}! Here&apos;s your company overview.
               </p>
             </div>
             <div className="flex items-center space-x-2">

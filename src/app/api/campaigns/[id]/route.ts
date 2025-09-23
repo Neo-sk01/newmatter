@@ -1,6 +1,35 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+type CampaignPromptRow = {
+  id: string;
+  prompt_version_id: string;
+  delivery_channel: string | null;
+  ab_group: string | null;
+  status: string | null;
+};
+
+type CampaignRow = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  campaign_prompts: CampaignPromptRow[] | null;
+};
+
+type PromptSelectionInput = {
+  promptId: string;
+  version?: number;
+};
+
+type CampaignResponse = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  promptSelections: Array<{ promptId: string; version: number }>;
+};
+
 // GET /api/campaigns/[id] -> get campaign by id
 export async function GET(
   req: Request,
@@ -31,20 +60,23 @@ export async function GET(
     }
 
     // Transform to expected format
-    const result = {
-      id: campaign.id,
-      name: campaign.name,
-      createdAt: campaign.created_at,
-      updatedAt: campaign.updated_at,
-      promptSelections: (campaign.campaign_prompts || []).map((cp: any) => ({
+    const typedCampaign = campaign as CampaignRow;
+
+    const result: CampaignResponse = {
+      id: typedCampaign.id,
+      name: typedCampaign.name,
+      createdAt: typedCampaign.created_at,
+      updatedAt: typedCampaign.updated_at,
+      promptSelections: (typedCampaign.campaign_prompts ?? []).map((cp) => ({
         promptId: cp.prompt_version_id,
-        version: 1 // We'll need to get actual version from prompt_versions table
-      }))
+        version: 1,
+      })),
     };
 
     return NextResponse.json({ ok: true, data: result });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
@@ -56,8 +88,14 @@ export async function PATCH(
   try {
     const supabase = await createClient();
     const { id } = await params;
-    const body = await req.json();
+    const body = (await req.json()) as {
+      name?: string;
+      promptSelections?: PromptSelectionInput[];
+    };
     const { name, promptSelections } = body;
+    const sanitizedSelections = Array.isArray(promptSelections)
+      ? promptSelections.filter((selection): selection is PromptSelectionInput & { promptId: string } => Boolean(selection?.promptId))
+      : [];
 
     // Update campaign name if provided
     if (name) {
@@ -70,7 +108,7 @@ export async function PATCH(
     }
 
     // Update prompt selections if provided
-    if (promptSelections && Array.isArray(promptSelections)) {
+    if (Array.isArray(promptSelections)) {
       // Delete existing campaign_prompts
       const { error: deleteError } = await supabase
         .from('campaign_prompts')
@@ -80,8 +118,8 @@ export async function PATCH(
       if (deleteError) throw deleteError;
 
       // Insert new campaign_prompts
-      if (promptSelections.length > 0) {
-        const campaignPrompts = promptSelections.map((selection: any) => ({
+      if (sanitizedSelections.length > 0) {
+        const campaignPrompts = sanitizedSelections.map((selection) => ({
           campaign_id: id,
           prompt_version_id: selection.promptId,
           delivery_channel: 'email',
@@ -115,20 +153,23 @@ export async function PATCH(
 
     if (fetchError) throw fetchError;
 
-    const result = {
-      id: updated.id,
-      name: updated.name,
-      createdAt: updated.created_at,
-      updatedAt: updated.updated_at,
-      promptSelections: (updated.campaign_prompts || []).map((cp: any) => ({
+    const typedUpdated = updated as CampaignRow;
+
+    const result: CampaignResponse = {
+      id: typedUpdated.id,
+      name: typedUpdated.name,
+      createdAt: typedUpdated.created_at,
+      updatedAt: typedUpdated.updated_at,
+      promptSelections: (typedUpdated.campaign_prompts ?? []).map((cp) => ({
         promptId: cp.prompt_version_id,
-        version: 1
-      }))
+        version: 1,
+      })),
     };
 
     return NextResponse.json({ ok: true, data: result });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
@@ -153,16 +194,17 @@ export async function DELETE(
       return NextResponse.json({ ok: false, error: 'Campaign not found' }, { status: 404 });
     }
 
-    const result = {
+    const result: CampaignResponse = {
       id: deleted.id,
       name: deleted.name,
       createdAt: deleted.created_at,
       updatedAt: deleted.updated_at,
-      promptSelections: []
+      promptSelections: [],
     };
 
     return NextResponse.json({ ok: true, data: result });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

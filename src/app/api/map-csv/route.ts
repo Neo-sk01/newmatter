@@ -170,7 +170,7 @@ Guidelines:
 
     const normalized = {
       ...object,
-      headerMapping: normalize((object as any)?.headerMapping, columns),
+      headerMapping: normalize(object.headerMapping, columns),
     };
 
     return Response.json(normalized);

@@ -1,37 +1,43 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import {
+  clearPromptCache,
+  getPromptCache,
+  setPromptCache,
+  type PromptCachePayload,
+  type PromptTemplateRow,
+  type PromptVersionRow,
+} from './cache';
 
-type PromptTemplateRow = {
-  id: string;
-  name: string;
-  goal?: string | null;
-  audience?: string | null;
-  channel?: string | null;
-  created_at: string;
-};
-
-type PromptVersionRow = {
-  id: string;
-  template_id: string;
-  version: number;
-  label: string;
-  body: string;
-  created_at: string;
-  author?: string | null;
-  notes?: string | null;
-  status?: string | null;
-};
+function isTableMissingError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: string; message?: string };
+  const code = typeof candidate.code === 'string' ? candidate.code : undefined;
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+  const normalized = message.toLowerCase();
+  return (
+    code === '42P01' ||
+    (normalized.includes('relation') && normalized.includes('does not exist'))
+  );
+}
 
 // GET /api/prompts -> list prompts with versions
 export async function GET() {
   try {
+    const cached = getPromptCache();
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     // Check if Supabase is configured
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      return NextResponse.json({ 
+      const payload: PromptCachePayload = {
         ok: false, 
         error: 'Supabase not configured. Please add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local',
-        data: [] // Return empty array for UI compatibility
-      });
+        data: []
+      };
+      setPromptCache(payload);
+      return NextResponse.json(payload);
     }
 
     const supabase = await createClient();
@@ -71,8 +77,21 @@ export async function GET() {
       versions: versionsByTemplate[template.id] || []
     }));
 
-    return NextResponse.json({ ok: true, data: prompts });
+    const payload: PromptCachePayload = { ok: true, data: prompts };
+    setPromptCache(payload);
+    return NextResponse.json(payload);
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Prompt tables are missing. Returning fallback response.');
+      const payload: PromptCachePayload = {
+        ok: false,
+        error: 'Prompt storage tables are not provisioned yet. Using default prompts.',
+        supabaseDisabled: true,
+        data: [],
+      };
+      setPromptCache(payload);
+      return NextResponse.json(payload);
+    }
     const message = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
@@ -131,8 +150,17 @@ export async function POST(req: Request) {
       versions: [version as PromptVersionRow]
     };
 
+    clearPromptCache();
     return NextResponse.json({ ok: true, data: prompt }, { status: 201 });
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Prompt tables are missing. Rejecting write request with fallback notice.');
+      return NextResponse.json({
+        ok: false,
+        error: 'Prompt storage tables are not provisioned yet. Remote persistence is disabled.',
+        supabaseDisabled: true,
+      }, { status: 200 });
+    }
     const message = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }

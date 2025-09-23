@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { clearLeadlistCache, getLeadlistCache, setLeadlistCache, type LeadlistCachePayload } from './cache';
 
 type LeadlistRow = {
   id: string;
@@ -59,6 +60,17 @@ const SAMPLE_LEADS: LeadPayload[] = [
   },
 ];
 
+function isTableMissingError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : undefined;
+  const message = typeof (error as { message?: unknown }).message === 'string' ? (error as { message: string }).message : '';
+  const normalizedMessage = message.toLowerCase();
+  return (
+    code === '42P01' ||
+    (normalizedMessage.includes('relation') && normalizedMessage.includes('does not exist'))
+  );
+}
+
 function mapLeadRow(row: LeadRow) {
   return {
     id: row.id,
@@ -75,8 +87,13 @@ function mapLeadRow(row: LeadRow) {
 
 export async function GET() {
   try {
+    const cached = getLeadlistCache();
+    if (cached) {
+      return NextResponse.json(cached);
+    }
+
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      return NextResponse.json({
+      const payload: LeadlistCachePayload = {
         ok: true,
         data: [
           {
@@ -86,7 +103,9 @@ export async function GET() {
             leads: SAMPLE_LEADS,
           },
         ],
-      });
+      };
+      setLeadlistCache(payload);
+      return NextResponse.json(payload);
     }
 
     const supabase = await createClient();
@@ -100,7 +119,9 @@ export async function GET() {
     if (listsError) throw listsError;
 
     if (!lists?.length) {
-      return NextResponse.json({ ok: true, data: [] });
+      const payload: LeadlistCachePayload = { ok: true, data: [] };
+      setLeadlistCache(payload);
+      return NextResponse.json(payload);
     }
 
     const listIds = (lists as LeadlistRow[]).map((l) => l.id);
@@ -126,8 +147,28 @@ export async function GET() {
       leads: (leadMap[list.id] || []).map(mapLeadRow),
     }));
 
-    return NextResponse.json({ ok: true, data: result });
+    const payload: LeadlistCachePayload = { ok: true, data: result };
+    setLeadlistCache(payload);
+    return NextResponse.json(payload);
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Leadlists tables are missing. Returning fallback response.');
+      const payload: LeadlistCachePayload = {
+        ok: false,
+        error: 'Lead storage tables are not provisioned yet. Using local sample data.',
+        supabaseDisabled: true,
+        data: [
+          {
+            id: 'sample-list',
+            name: 'Sample Leads',
+            createdAt: new Date().toISOString(),
+            leads: SAMPLE_LEADS,
+          },
+        ],
+      };
+      setLeadlistCache(payload);
+      return NextResponse.json(payload);
+    }
     const message = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
@@ -190,6 +231,8 @@ export async function POST(req: Request) {
       if (insertError) throw insertError;
     }
 
+    clearLeadlistCache();
+
     return NextResponse.json({
       ok: true,
       data: {
@@ -200,6 +243,14 @@ export async function POST(req: Request) {
       },
     }, { status: 201 });
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Leadlists tables are missing. Rejecting write request with fallback notice.');
+      return NextResponse.json({
+        ok: false,
+        error: 'Lead storage tables are not provisioned yet. Remote persistence is disabled.',
+        supabaseDisabled: true,
+      }, { status: 200 });
+    }
     const message = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }

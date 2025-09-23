@@ -15,12 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,7 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar as UiSidebar,
   SidebarContent,
@@ -71,14 +65,12 @@ import { HydrationSafeThemeToggle } from "@/components/HydrationSafeThemeToggle"
 import { format } from "date-fns";
 import {
   AlignLeft,
-  ArrowRight,
   BadgeCheck,
   BrainCircuit,
   Copy,
   CalendarDays,
   Sparkles,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CloudUpload,
@@ -91,14 +83,11 @@ import {
   Loader2,
   Mail,
   MailCheck,
-  MailQuestion,
   Play,
   Search,
   Settings,
-  ShieldCheck,
   StopCircle,
   Upload,
-  Users2,
   Linkedin,
   Trash2,
   FolderPlus,
@@ -148,13 +137,6 @@ interface PromptConfig {
   name: string;
   content: string;
 }
-
-type EnrichOptions = {
-  linkedin: boolean;
-  company: boolean;
-  news: boolean;
-  tech: boolean;
-};
 
 const initialLeads: Lead[] = [
   {
@@ -1053,15 +1035,17 @@ function Stepper({ step, onStep }: { step: number; onStep: (n: number) => void }
 function ImportScreen({
   leads,
   onImportCSV,
-  onConnectCRM,
   onRemoveLead,
   onClearLeads,
+  isImporting,
+  importError,
 }: {
   leads: Lead[];
-  onImportCSV: (file: File) => void;
-  onConnectCRM: (provider: string) => void;
+  onImportCSV: (file: File) => Promise<void>;
   onRemoveLead: (id: string) => void;
   onClearLeads: () => void;
+  isImporting: boolean;
+  importError: string | null;
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -1071,7 +1055,7 @@ function ImportScreen({
     e.stopPropagation();
     setDragActive(false);
     const f = e.dataTransfer?.files?.[0];
-    if (f) onImportCSV(f);
+    if (f) void onImportCSV(f);
   };
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1086,7 +1070,7 @@ function ImportScreen({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 xl:grid-cols-6">
       <Card className="rounded-2xl lg:col-span-4 xl:col-span-6">
         <CardHeader>
           <CardTitle>Upload CSV</CardTitle>
@@ -1097,7 +1081,8 @@ function ImportScreen({
             className={cx(
               "rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors",
               "bg-muted/20 hover:bg-muted/30",
-              dragActive && "border-ring bg-accent/40"
+              dragActive && "border-ring bg-accent/40",
+              isImporting && "pointer-events-none opacity-60"
             )}
             onDragOver={handleDragOver}
             onDragEnter={handleDragOver}
@@ -1106,11 +1091,17 @@ function ImportScreen({
             onClick={() => fileRef.current?.click()}
             role="button"
             aria-label="Drop CSV file here or click to browse"
+            aria-busy={isImporting}
           >
             <div className="flex flex-col items-center gap-2">
               <Upload className="h-6 w-6 text-muted-foreground" />
               <div className="font-medium">Drag & drop CSV here</div>
               <div className="text-xs text-muted-foreground">or click to browse · .csv only</div>
+              {isImporting && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Processing file…
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1121,19 +1112,34 @@ function ImportScreen({
               className="rounded-xl"
               onChange={(e) => {
                 const f = e.currentTarget.files?.[0];
-                if (f) onImportCSV(f);
+                if (f) void onImportCSV(f);
               }}
+              disabled={isImporting}
             />
             <Button
               className="rounded-xl"
               onClick={() => {
                 const f = fileRef.current?.files?.[0];
-                if (f) onImportCSV(f);
+                if (f) void onImportCSV(f);
               }}
+              disabled={isImporting}
             >
-              <Upload className="mr-2 h-4 w-4" /> Import
+              {isImporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Importing…
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" /> Import
+                </>
+              )}
             </Button>
           </div>
+          {importError && (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+              {importError}
+            </div>
+          )}
           {/* Detected Columns section removed as requested */}
         </CardContent>
       </Card>
@@ -1249,7 +1255,7 @@ function EnrichScreen({
             <div>
               <CardTitle>LinkedIn Enrichment</CardTitle>
               <CardDescription>
-                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead's LinkedIn profile.
+                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead&apos;s LinkedIn profile.
               </CardDescription>
             </div>
             <Button
@@ -2258,10 +2264,10 @@ export default function SalesAutomationUI() {
   // Local working set mirrors the active list
   const [leads, setLeads] = useState<Lead[]>(() => initialLeads.map((lead) => ({ ...lead })));
   // LinkedIn enrichment flow replaces generic enrichment toggles
-  const [template, setTemplate] = useState<string>(
+  const [template] = useState<string>(
     `Hi {{firstName}},\n\nI came across {{company}} and noticed your work in {{title}}. We help teams like yours automate outbound so you get more replies with fewer sends.\n\nWould you be open to a quick chat this week?\n\nBest,\nNeo\n`
   );
-  const [subject, setSubject] = useState<string>("Quick idea for {{company}}");
+  const [subject] = useState<string>("Quick idea for {{company}}");
   const [emails, setEmails] = useState<Record<string, GeneratedEmail>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -2275,6 +2281,8 @@ export default function SalesAutomationUI() {
   const [supabaseAvailable, setSupabaseAvailable] = useState(isSupabaseEnvConfigured);
   const [loadingPrompts, setLoadingPrompts] = useState(false);
   const [loadingLeadLists, setLoadingLeadLists] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const activePrompt = useMemo(() => {
     if (prompts.length === 0) {
@@ -2298,7 +2306,7 @@ export default function SalesAutomationUI() {
 
       if (!response.ok || data?.ok === false) {
         const message = typeof data?.error === 'string' ? data.error : response.statusText;
-        if (data?.error?.includes('Supabase not configured') || response.status >= 500) {
+        if (data?.error?.includes('Supabase not configured') || data?.supabaseDisabled || response.status >= 500) {
           setSupabaseAvailable(false);
         }
         if (message) {
@@ -2354,11 +2362,11 @@ export default function SalesAutomationUI() {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        if (response.status >= 500) {
+        if (response.status >= 500 || error?.supabaseDisabled) {
           setSupabaseAvailable(false);
         }
         console.error('Failed to sync lead list', error?.error ?? response.statusText, error?.code ? { code: error.code, details: error.details } : undefined);
-        if (response.status >= 500 && error?.error) {
+        if ((response.status >= 500 || error?.supabaseDisabled) && error?.error) {
           console.warn('Lead list sync disabled:', error.error);
         }
       }
@@ -2422,7 +2430,7 @@ export default function SalesAutomationUI() {
       if (!response.ok || data?.ok === false) {
         resetToSampleLeadList();
         const message = typeof data?.error === 'string' ? data.error : response.statusText;
-        if (data?.error?.includes('Supabase not configured') || response.status >= 500) {
+        if (data?.error?.includes('Supabase not configured') || data?.supabaseDisabled || response.status >= 500) {
           setSupabaseAvailable(false);
         }
         if (message) {
@@ -2434,10 +2442,27 @@ export default function SalesAutomationUI() {
       const fetched: LeadListApiPayload[] = Array.isArray(data?.data) ? (data.data as LeadListApiPayload[]) : [];
 
       if (!fetched.length) {
-        setLeadLists([]);
-        setCurrentListId("");
-        setLeads([]);
-        setSelectedLeadId(null);
+        // Don't clear existing lead lists if they exist (e.g., from a recent import)
+        // Only reset to empty if we don't have any local lists either
+        setLeadLists((prev) => {
+          if (prev.length > 0 && prev[0]?.id !== DEFAULT_LEAD_LIST.id) {
+            // We have non-default lists, keep them
+            console.log('No remote lists found, keeping local lists');
+            return prev;
+          }
+          // No local lists, clear everything
+          return [];
+        });
+        
+        // Don't clear leads if we have some
+        setLeads((prev) => {
+          if (prev.length > 0) {
+            console.log('Keeping existing leads despite no remote lists');
+            return prev;
+          }
+          return [];
+        });
+        
         return;
       }
 
@@ -2478,7 +2503,7 @@ export default function SalesAutomationUI() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || data?.ok === false || !data?.data) {
-        if (response.status >= 500) {
+        if (response.status >= 500 || data?.supabaseDisabled) {
           setSupabaseAvailable(false);
           const message = typeof data?.error === 'string' ? data.error : response.statusText;
           if (message) {
@@ -2505,6 +2530,9 @@ export default function SalesAutomationUI() {
       const response = await fetch(`/api/leadlists/${id}`, { method: 'DELETE' });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         console.error('Failed to delete lead list', error?.error ?? response.statusText);
       }
     } catch (error) {
@@ -2550,6 +2578,9 @@ export default function SalesAutomationUI() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         console.error('Failed to rename prompt', error?.error ?? response.statusText);
       }
     } catch (error) {
@@ -2579,6 +2610,9 @@ export default function SalesAutomationUI() {
       const data = await response.json().catch(() => null);
 
       if (!response.ok || data?.ok === false || !data?.data) {
+        if (response.status >= 500 || data?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         setPrompts((prev) => [...prev, provisional]);
         setActivePromptId(provisional.id);
         return;
@@ -2626,6 +2660,9 @@ export default function SalesAutomationUI() {
       const data = await response.json().catch(() => null);
 
       if (!response.ok || data?.ok === false || !data?.data) {
+        if (response.status >= 500 || data?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         setPrompts((prev) => [...prev, provisional]);
         setActivePromptId(provisional.id);
         return;
@@ -2665,6 +2702,9 @@ export default function SalesAutomationUI() {
       const response = await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         console.error('Failed to delete prompt', error?.error ?? response.statusText);
       }
     } catch (error) {
@@ -2685,6 +2725,9 @@ export default function SalesAutomationUI() {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        if (error?.supabaseDisabled) {
+          setSupabaseAvailable(false);
+        }
         console.error('Failed to reset prompt', error?.error ?? response.statusText);
       }
     } catch (error) {
@@ -2697,14 +2740,15 @@ export default function SalesAutomationUI() {
     setSelectedLeadId(id);
   };
 
-  // Preview using the first lead
-  const preview = useMemo(() => {
-    const first = leads[0];
-    if (!first) return "";
-    return `${tokenFill(subject, first)}\n\n${tokenFill(template, first)}`;
-  }, [subject, template, leads]);
+  const onImportCSV = async (file: File): Promise<void> => {
+    setImportError(null);
 
-  const onImportCSV = async (file: File) => {
+    if (!file?.name?.toLowerCase().endsWith('.csv')) {
+      setImportError('Please upload a file with a .csv extension.');
+      return;
+    }
+
+    setImporting(true);
     try {
       // 1) Parse CSV on the client
       const parsed = await new Promise<Papa.ParseResult<Record<string, unknown>>>((resolve, reject) => {
@@ -2721,59 +2765,127 @@ export default function SalesAutomationUI() {
       const columns = (parsed.meta.fields || []).filter(Boolean) as string[];
 
       if (!rows.length || !columns.length) {
-        console.warn("CSV appears empty or has no headers");
+        setImportError('The CSV file appears empty or is missing a header row.');
         return;
       }
 
-      // 2) Ask the backend LLM to map headers and provide sample normalization
-      const resp = await fetch("/api/map-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
-      });
+      // 2) Try enhanced AI-powered parsing first
+      let mapped: Lead[] = [];
+      let useEnhancedParser = true;
+      
+      try {
+        console.log('Using enhanced AI-powered CSV parser...');
+        const enhancedResp = await fetch("/api/parse-csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            columns,
+            rows,
+            options: {
+              skipEmptyRows: true,
+              validateEmails: true,
+              detectDuplicates: true,
+              maxRows: 10000,
+            }
+          }),
+        });
 
-      let headerMapping: Record<string, string> | null = null;
-      let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
-
-      if (resp.ok) {
-        const data = await resp.json();
-        headerMapping = data?.headerMapping ?? null;
-        rules = data?.rules;
+        if (enhancedResp.ok) {
+          const enhancedResult = await enhancedResp.json();
+          
+          if (enhancedResult.success) {
+            console.log('Enhanced parser successful:', {
+              totalRows: enhancedResult.totalRows,
+              validRows: enhancedResult.validRows,
+              dataQuality: enhancedResult.dataQuality,
+              suggestions: enhancedResult.suggestions
+            });
+            
+            // Convert enhanced result to Lead format
+            mapped = enhancedResult.leads.map((lead: any, idx: number) => ({
+              id: lead.id || `${Date.now()}-${idx}`,
+              firstName: lead.firstName || "",
+              lastName: lead.lastName || "",
+              company: lead.company || "",
+              email: (lead.email || "").toLowerCase(),
+              title: lead.title || "",
+              website: lead.website || undefined,
+              linkedin: lead.linkedin || undefined,
+              status: "new" as const,
+            }));
+            
+            // Show data quality info if available
+            if (enhancedResult.dataQuality?.emailValidation?.invalid > 0) {
+              console.warn(`Note: ${enhancedResult.dataQuality.emailValidation.invalid} invalid emails were cleaned`);
+            }
+            if (enhancedResult.dataQuality?.duplicates > 0) {
+              console.warn(`Note: ${enhancedResult.dataQuality.duplicates} duplicate entries were removed`);
+            }
+          } else {
+            console.warn('Enhanced parser returned error, falling back...');
+            useEnhancedParser = false;
+          }
+        } else {
+          console.warn('Enhanced parser not available, falling back...');
+          useEnhancedParser = false;
+        }
+      } catch (enhancedError) {
+        console.warn('Enhanced parser failed, using fallback:', enhancedError);
+        useEnhancedParser = false;
       }
+      
+      // Fallback to original parser if enhanced parser fails
+      if (!useEnhancedParser) {
+        console.log('Using original CSV parser...');
+        const resp = await fetch("/api/map-csv", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
+        });
 
-      if (!headerMapping) {
-        console.warn("Falling back to heuristic header mapping");
-        headerMapping = guessHeaderMapping(columns);
+        let headerMapping: Record<string, string> | null = null;
+        let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
+
+        if (resp.ok) {
+          const data = await resp.json();
+          headerMapping = data?.headerMapping ?? null;
+          rules = data?.rules;
+        }
+
+        if (!headerMapping) {
+          console.warn("Falling back to heuristic header mapping");
+          headerMapping = guessHeaderMapping(columns);
+        }
+
+        // Apply the mapping to all rows locally
+        mapped = (rows as Record<string, unknown>[]) 
+          .map((r, idx) => {
+            const normalized = applyMapping(r, headerMapping!, rules);
+            const hasAny = Boolean(
+              normalized.email ||
+              normalized.linkedin ||
+              normalized.company ||
+              normalized.firstName ||
+              normalized.lastName
+            );
+            if (!hasAny) return null;
+            return {
+              id: `${Date.now()}-${idx}`,
+              firstName: normalized.firstName || "",
+              lastName: normalized.lastName || "",
+              company: normalized.company || "",
+              email: (normalized.email || "").toLowerCase(),
+              title: normalized.title || "",
+              website: normalized.website || undefined,
+              linkedin: normalized.linkedin || undefined,
+              status: "new" as const,
+            };
+          })
+          .filter(Boolean) as Lead[];
       }
-
-      // 3) Apply the mapping to all rows locally
-      const mapped: Lead[] = (rows as Record<string, unknown>[]) 
-        .map((r, idx) => {
-          const normalized = applyMapping(r, headerMapping!, rules);
-          const hasAny = Boolean(
-            normalized.email ||
-            normalized.linkedin ||
-            normalized.company ||
-            normalized.firstName ||
-            normalized.lastName
-          );
-          if (!hasAny) return null;
-          return {
-            id: `${Date.now()}-${idx}`,
-            firstName: normalized.firstName || "",
-            lastName: normalized.lastName || "",
-            company: normalized.company || "",
-            email: (normalized.email || "").toLowerCase(),
-            title: normalized.title || "",
-            website: normalized.website || undefined,
-            linkedin: normalized.linkedin || undefined,
-            status: "new" as const,
-          };
-        })
-        .filter(Boolean) as Lead[];
 
       if (!mapped.length) {
-        console.warn("No valid leads produced from CSV");
+        setImportError('We could not find any rows with an email, LinkedIn URL, or name/company details.');
         return;
       }
 
@@ -2781,30 +2893,60 @@ export default function SalesAutomationUI() {
       const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
       let createdList: LeadList | null = null;
 
+      console.log('Creating lead list:', { 
+        supabaseAvailable, 
+        leadCount: mapped.length,
+        fileName: base 
+      });
+
       if (supabaseAvailable) {
         const remote = await createLeadListRemote(base, mapped);
+        console.log('Remote creation result:', remote);
         if (remote) {
           createdList = remote;
         }
       }
 
       if (!createdList) {
+        console.log('Creating local lead list');
         createdList = { id: `${Date.now()}`, name: base, leads: mapped };
       }
 
       const listToAdd = createdList!;
-      setLeadLists((prev) => [...prev, listToAdd]);
+      console.log('Adding lead list:', { 
+        id: listToAdd.id, 
+        name: listToAdd.name,
+        leadCount: listToAdd.leads?.length 
+      });
+      
+      setLeadLists((prev) => {
+        const newLists = [...prev, listToAdd];
+        console.log('Updated lead lists:', newLists);
+        return newLists;
+      });
       setCurrentListId(listToAdd.id);
-      updateLeads(listToAdd.leads, listToAdd.id);
-      setSelectedLeadId(listToAdd.leads[0]?.id ?? null);
-      setSection("enrich");
+      
+      // Make sure leads are properly set
+      const leadsToSet = listToAdd.leads || mapped;
+      console.log('Setting leads:', leadsToSet);
+      updateLeads(leadsToSet, listToAdd.id);
+      
+      if (leadsToSet.length > 0) {
+        setSelectedLeadId(leadsToSet[0]?.id ?? null);
+      }
+      
+      // Don't change section immediately - let user see the imported leads
+      // setSection("enrich");
+      
+      // Show success message
+      console.log(`Successfully imported ${leadsToSet.length} leads!`);
     } catch (err) {
       console.error("Import failed", err);
+      const message = err instanceof Error ? err.message : 'Failed to import CSV. Please try again.';
+      setImportError(message);
+    } finally {
+      setImporting(false);
     }
-  };
-
-  const onConnectCRM = (provider: string) => {
-    console.log("Connect to:", provider);
   };
 
   const setLinkedInForLead = (leadId: string, url: string) => {
@@ -2819,19 +2961,6 @@ export default function SalesAutomationUI() {
 
   const bulkMarkEnriched = () => {
     updateLeads((prev) => prev.map((l) => (l.linkedin ? { ...l, status: "enriched" } : l)));
-  };
-
-  const runGeneration = () => {
-    const map: Record<string, GeneratedEmail> = {};
-    leads.forEach((l) => {
-      map[l.id] = {
-        leadId: l.id,
-        subject: tokenFill(subject, l),
-        body: tokenFill(template, l),
-      };
-    });
-    setEmails(map);
-    updateLeads((prev) => prev.map((l) => ({ ...l, status: "generated" })));
   };
 
   const generateColdEmailForLead = async (lead: Lead) => {
@@ -3089,9 +3218,10 @@ export default function SalesAutomationUI() {
               <ImportScreen
                 leads={leads}
                 onImportCSV={onImportCSV}
-                onConnectCRM={onConnectCRM}
                 onRemoveLead={removeLead}
                 onClearLeads={clearLeads}
+                isImporting={importing}
+                importError={importError}
               />
             )}
 

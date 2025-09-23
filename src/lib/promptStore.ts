@@ -24,6 +24,10 @@ function campaignPath(id: string) {
   return path.join(CAMPAIGNS_DIR, `${id}.json`);
 }
 
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && 'code' in error;
+}
+
 export async function listPrompts(): Promise<Prompt[]> {
   await ensureDirs();
   const files = await fs.readdir(PROMPTS_DIR);
@@ -31,7 +35,7 @@ export async function listPrompts(): Promise<Prompt[]> {
   for (const file of files) {
     if (!file.endsWith('.json')) continue;
     const raw = await fs.readFile(path.join(PROMPTS_DIR, file), 'utf-8');
-    items.push(JSON.parse(raw));
+    items.push(JSON.parse(raw) as Prompt);
   }
   // newest updated first
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -41,10 +45,10 @@ export async function getPrompt(id: string): Promise<Prompt | null> {
   await ensureDirs();
   try {
     const raw = await fs.readFile(promptPath(id), 'utf-8');
-    return JSON.parse(raw);
-  } catch (e: any) {
-    if (e.code === 'ENOENT') return null;
-    throw e;
+    return JSON.parse(raw) as Prompt;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
   }
 }
 
@@ -88,9 +92,9 @@ export async function deletePrompt(id: string): Promise<boolean> {
   try {
     await fs.unlink(promptPath(id));
     return true;
-  } catch (e: any) {
-    if (e.code === 'ENOENT') return false;
-    throw e;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -101,7 +105,7 @@ export async function listCampaigns(): Promise<Campaign[]> {
   for (const file of files) {
     if (!file.endsWith('.json')) continue;
     const raw = await fs.readFile(path.join(CAMPAIGNS_DIR, file), 'utf-8');
-    items.push(JSON.parse(raw));
+    items.push(JSON.parse(raw) as Campaign);
   }
   return items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -110,10 +114,10 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
   await ensureDirs();
   try {
     const raw = await fs.readFile(campaignPath(id), 'utf-8');
-    return JSON.parse(raw);
-  } catch (e: any) {
-    if (e.code === 'ENOENT') return null;
-    throw e;
+    return JSON.parse(raw) as Campaign;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return null;
+    throw error;
   }
 }
 
@@ -147,8 +151,8 @@ export async function deleteCampaign(id: string): Promise<boolean> {
   try {
     await fs.unlink(campaignPath(id));
     return true;
-  } catch (e: any) {
-    if (e.code === 'ENOENT') return false;
-    throw e;
+  } catch (error) {
+    if (isNodeError(error) && error.code === 'ENOENT') return false;
+    throw error;
   }
 }

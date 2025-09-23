@@ -30,7 +30,7 @@ const links = [
 
 export default function FooterSection() {
     return (
-        <div className="border-t border-border bg-muted/30">
+        <div className="border-t border-border bg-background">
             <div className="mx-auto flex h-16 max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 text-xs md:text-sm">
                 <Link href="/" aria-label="go home" className="flex items-center gap-2">
                     <Logo className="h-7" />

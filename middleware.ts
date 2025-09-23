@@ -10,7 +10,7 @@ const isProtectedRoute = createRouteMatcher([
 export default clerkMiddleware(async (auth, req) => {
   if (!isProtectedRoute(req)) return
 
-  const { userId } = auth()
+  const { userId } = await auth()
   if (userId) return
 
   // Unauthenticated: if accessing a company dashboard, redirect to that company's portal

@@ -1,23 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-type PromptTemplateRow = {
-  id: string;
-  name: string;
-  created_at: string;
-};
-
-type PromptVersionRow = {
-  id: string;
-  template_id: string;
-  version: number;
-  label: string;
-  body: string;
-  created_at: string;
-  author?: string | null;
-  notes?: string | null;
-  status?: string | null;
-};
+import { clearPromptCache, type PromptTemplateRow, type PromptVersionRow } from '../cache';
 
 async function mapPromptById(id: string) {
   const supabase = await createClient();
@@ -107,6 +90,8 @@ export async function PATCH(
       if (error) throw error;
     }
 
+    clearPromptCache();
+
     const updated = await mapPromptById(id);
     if (!updated) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
     return NextResponse.json({ ok: true, data: updated });
@@ -134,6 +119,8 @@ export async function DELETE(
       .eq('id', id);
 
     if (error) throw error;
+
+    clearPromptCache();
 
     return NextResponse.json({ ok: true });
   } catch (e) {

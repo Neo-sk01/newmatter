@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { UserPlus, Edit, Trash2, Mail, Calendar } from 'lucide-react';
+import { UserPlus, Edit, Mail, Calendar } from 'lucide-react';
 import { UserRole, UserMetadata } from '@/lib/types/auth';
 
 interface CompanyUser {
@@ -46,21 +46,24 @@ export function UserManagement({ companyId }: UserManagementProps) {
 
   const userMetadata = user?.publicMetadata as unknown as UserMetadata;
 
-  useEffect(() => {
-    fetchUsers();
-  }, [companyId]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const response = await fetch(`/api/users/${companyId}`);
-      const data = await response.json();
-      setUsers(data.users || []);
+      if (!response.ok) {
+        throw new Error('Failed to fetch users');
+      }
+      const data = (await response.json()) as { users?: CompanyUser[] };
+      setUsers(Array.isArray(data.users) ? data.users : []);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId]);
+
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
 
   const handleInviteUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +82,7 @@ export function UserManagement({ companyId }: UserManagementProps) {
           department: '',
           title: ''
         });
-        fetchUsers();
+        void fetchUsers();
       }
     } catch (error) {
       console.error('Error inviting user:', error);
@@ -105,7 +108,7 @@ export function UserManagement({ companyId }: UserManagementProps) {
       if (response.ok) {
         setEditDialogOpen(false);
         setSelectedUser(null);
-        fetchUsers();
+        void fetchUsers();
       }
     } catch (error) {
       console.error('Error updating user:', error);

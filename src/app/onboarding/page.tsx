@@ -76,7 +76,7 @@ export default function OnboardingPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Welcome to SalesMatter AI</CardTitle>
           <CardDescription>
-            Let's set up your company profile to get started with AI-powered lead generation
+            Let&apos;s set up your company profile to get started with AI-powered lead generation
           </CardDescription>
         </CardHeader>
         <CardContent>

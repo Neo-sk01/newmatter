@@ -1,11 +1,24 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { clearLeadlistCache } from '../cache';
 
 type NormalizedError = {
   message: string;
   code?: string;
   details?: string;
 };
+
+function isTableMissingError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: string; message?: string };
+  const code = typeof candidate.code === 'string' ? candidate.code : undefined;
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+  const normalized = message.toLowerCase();
+  return (
+    code === '42P01' ||
+    (normalized.includes('relation') && normalized.includes('does not exist'))
+  );
+}
 
 function normalizeError(error: unknown): NormalizedError {
   if (error instanceof Error) {
@@ -134,6 +147,10 @@ export async function GET(
 
     return NextResponse.json({ ok: true, data: list });
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Leadlists tables are missing. Cannot fetch detail.');
+      return NextResponse.json({ ok: false, error: 'Lead storage tables are not provisioned yet.', supabaseDisabled: true }, { status: 200 });
+    }
     const { message, code, details } = normalizeError(e);
     return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
@@ -177,10 +194,10 @@ export async function PATCH(
         .eq('id', id)
         .eq('company_id', MOCK_COMPANY_ID);
 
-      if (updateError) throw updateError;
-    }
+    if (updateError) throw updateError;
+  }
 
-    if (Array.isArray(leads)) {
+  if (Array.isArray(leads)) {
       const { error: deleteError } = await supabase
         .from('leads')
         .delete()
@@ -211,8 +228,14 @@ export async function PATCH(
     const updated = await fetchLeadListById(id);
     if (!updated) return NextResponse.json({ ok: false, error: 'Not found' }, { status: 404 });
 
+    clearLeadlistCache();
+
     return NextResponse.json({ ok: true, data: updated });
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Leadlists tables are missing. Skipping update.');
+      return NextResponse.json({ ok: false, error: 'Lead storage tables are not provisioned yet.', supabaseDisabled: true }, { status: 200 });
+    }
     const { message, code, details } = normalizeError(e);
     return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
@@ -237,8 +260,14 @@ export async function DELETE(
 
     if (error) throw error;
 
+    clearLeadlistCache();
+
     return NextResponse.json({ ok: true });
   } catch (e) {
+    if (isTableMissingError(e)) {
+      console.warn('Leadlists tables are missing. Nothing to delete.');
+      return NextResponse.json({ ok: false, error: 'Lead storage tables are not provisioned yet.', supabaseDisabled: true }, { status: 200 });
+    }
     const { message, code, details } = normalizeError(e);
     return NextResponse.json({ ok: false, error: message, code, details }, { status: 500 });
   }
