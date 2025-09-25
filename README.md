@@ -8,7 +8,7 @@ Built with the App Router, Tailwind CSS, shadcn‑style components (Radix primit
 
 - Import: Upload CSVs or connect to a CRM (UI only).
 - Import: Upload CSVs (drag & drop). We parse on the client and call an LLM mapping API to normalize columns to a standard lead schema.
-- Enrich: Toggle data sources (LinkedIn, company site, news, tech stack) to augment leads (demo behavior).
+- Enrich: Run GPT-4o web research per lead, capture LinkedIn URLs, and approve 100-word insight summaries before move to generation.
 - Generate: Use tokenized templates and GPT‑4o‑mini via the Vercel AI SDK to generate personalized drafts.
 - Review: Inline edit, approve/reject per lead; preview live AI streaming output.
 - Send: Simulated batch sending with progress, scheduling, and limits.
@@ -20,7 +20,7 @@ Built with the App Router, Tailwind CSS, shadcn‑style components (Radix primit
 - Framework: Next.js 15 (App Router) + React 19
 - UI: Tailwind CSS 4, shadcn‑style components (Radix UI), lucide-react icons
 - Charts: Recharts
-- AI: Vercel AI SDK (`ai`) with `@ai-sdk/openai` (model: `gpt-4o-mini`)
+- AI: Vercel AI SDK (`ai`) with provider-resolved models (defaults to `openai:gpt-4o-mini`)
 
 ## Quick Start
 
@@ -41,10 +41,12 @@ yarn
 
 2) Configure environment
 
-Create a `.env.local` file in the project root with your OpenAI API key:
+Create a `.env.local` file in the project root with your OpenAI API key. Optionally override the model used for the Enrich tab's research summaries:
 
 ```bash
 OPENAI_API_KEY=sk-...
+# Optional: override GPT model for research summaries (defaults to gpt-4o)
+AI_RESEARCH_MODEL=gpt-4o
 ```
 
 3) Run the dev server
@@ -59,7 +61,7 @@ Visit http://localhost:3000
 
 - Flow: Import → Enrich → Generate → Review → Send → Analytics
 - The main UI lives in `src/app/sales_matter_ai_sales_automation_ui_shadcn_react.tsx` and is rendered on `src/app/page.tsx` and `src/app/salesmatter/page.tsx`.
-- AI generation streams from the API route `src/app/api/generate-email/route.ts`, using the Vercel AI SDK. It reads `OPENAI_API_KEY` from your environment.
+- AI generation streams from the API route `src/app/api/generate-email/route.ts`, using the Vercel AI SDK. It reads `OPENAI_API_KEY` from your environment and optionally honors `AI_EMAIL_MODEL` (format `provider:model`, e.g. `openai:gpt-4o-mini`).
 - CSV → JSON mapping uses `src/app/api/map-csv/route.ts`. The client parses the CSV (Papaparse) and sends header names with a small sample of rows. The endpoint asks the model to map arbitrary headers to the canonical fields: `firstName`, `lastName`, `company`, `email`, `title`, `website`, `linkedin`. The client applies this mapping to the entire CSV locally. If the model is unavailable, a heuristic fallback mapping is used.
 - CRM connections, enrichment providers, and SMTP sending are demo UIs. Sending and metrics are simulated for prototyping purposes.
 
@@ -71,6 +73,7 @@ Key files and directories:
 - `src/app/salesmatter/page.tsx` — Alternate route to the same UI
 - `src/app/layout.tsx` — App layout, fonts, and theme provider
 - `src/app/api/generate-email/route.ts` — AI streaming endpoint
+- `src/app/api/lead-research/route.ts` — OpenAI web-search + summarization proxy for the Enrich tab
 - `src/app/api/map-csv/route.ts` — LLM-assisted CSV header mapping
 - `src/components/ui/*` — Reusable shadcn‑style UI components
 - `src/components/theme-provider.tsx` — Theme handling (light/dark)

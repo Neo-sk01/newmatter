@@ -92,6 +92,7 @@ import {
   Trash2,
   FolderPlus,
   Folder,
+  ExternalLink,
   X,
 } from "lucide-react";
 import {
@@ -124,6 +125,35 @@ interface GeneratedEmail {
   leadId: string;
   subject: string;
   body: string;
+}
+
+interface LeadResearchResult {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
+interface LeadResearchState {
+  summary: string;
+  approved: boolean;
+  results: LeadResearchResult[];
+  query: string;
+  lastFetchedAt?: string;
+}
+
+interface LeadResearchResultRaw {
+  title?: string | null;
+  link?: string | null;
+  snippet?: string | null;
+  htmlSnippet?: string | null;
+}
+
+interface LeadResearchApiResponse {
+  query?: string | null;
+  results?: LeadResearchResultRaw[] | null;
+  summary?: string | null;
+  fetchedAt?: string | null;
+  error?: string | null;
 }
 
 interface LeadList {
@@ -286,6 +316,20 @@ const cx = (...classes: (string | false | undefined)[]) => classes.filter(Boolea
 const createPromptId = () => `prompt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 const leadStatuses: Lead['status'][] = ['new', 'enriched', 'generated', 'approved', 'rejected', 'sent'];
+
+const RESEARCH_SUMMARY_WORD_LIMIT = 100;
+
+const countWords = (value: string) => {
+  if (!value) return 0;
+  return value.trim().split(/\s+/).filter(Boolean).length;
+};
+
+const clampToWordLimit = (value: string, limit: number) => {
+  if (!value) return '';
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= limit) return value.trim();
+  return words.slice(0, limit).join(' ');
+};
 
 const normalizeLeadStatus = (status: unknown): Lead['status'] =>
   leadStatuses.includes(status as Lead['status']) ? (status as Lead['status']) : 'new';
@@ -1225,14 +1269,23 @@ function ImportScreen({
 
 function EnrichScreen({
   leads,
+  research,
+  researchWordLimit,
   onSetLinkedIn,
   onBulkMarkEnriched,
+  onUpdateResearch,
 }: {
   leads: Lead[];
+  research: Record<string, LeadResearchState>;
+  researchWordLimit: number;
   onSetLinkedIn: (leadId: string, url: string) => void;
   onBulkMarkEnriched: () => void;
+  onUpdateResearch: (
+    leadId: string,
+    updater: Partial<LeadResearchState> | ((previous: LeadResearchState) => LeadResearchState)
+  ) => void;
 }) {
-  const googleQuery = (l: Lead) => {
+  const googleQuery = useCallback((l: Lead) => {
     let domain = "";
     try {
       if (l.website) {
@@ -1241,21 +1294,186 @@ function EnrichScreen({
     } catch {}
     const q = `site:linkedin.com/in "${l.firstName} ${l.lastName}" ${l.company}${domain ? ` ${domain}` : ""}`;
     return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-  };
-  const linkedinPeopleQuery = (l: Lead) =>
-    `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
-      `${l.firstName} ${l.lastName} ${l.company}`
-    )}`;
+  }, []);
+  const linkedinPeopleQuery = useCallback(
+    (l: Lead) =>
+      `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+        `${l.firstName} ${l.lastName} ${l.company}`
+      )}`,
+    []
+  );
   const [showLinkedInCard, setShowLinkedInCard] = useState(true);
+  const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [localResults, setLocalResults] = useState<LeadResearchResult[]>([]);
+  const [localSummary, setLocalSummary] = useState('');
+  const [wordCount, setWordCount] = useState(0);
+  const [isResearchLoading, setIsResearchLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryNotice, setSummaryNotice] = useState<string | null>(null);
+
+  const runResearchFetch = useCallback(
+    async (lead: Lead, options?: { forceRefresh?: boolean }) => {
+      setIsResearchLoading(true);
+      setFetchError(null);
+      setSummaryError(null);
+      setSummaryNotice(null);
+      try {
+        const response = await fetch("/api/lead-research", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lead }),
+        });
+        const data = (await response.json().catch(() => ({}))) as LeadResearchApiResponse;
+        if (!response.ok) {
+          const message = typeof data?.error === 'string' ? data.error : `Failed to fetch research (${response.status})`;
+          throw new Error(message);
+        }
+
+        const results: LeadResearchResult[] = Array.isArray(data?.results)
+          ? data.results.slice(0, 8).map((item) => ({
+              title: typeof item?.title === 'string' && item.title.trim() ? item.title.trim() : 'Untitled result',
+              link: typeof item?.link === 'string' ? item.link : '#',
+              snippet:
+                typeof item?.snippet === 'string'
+                  ? item.snippet
+                  : typeof item?.htmlSnippet === 'string'
+                    ? item.htmlSnippet.replace(/<[^>]+>/g, '')
+                    : '',
+            }))
+          : [];
+
+        setLocalResults(results);
+
+        const summaryFromApi =
+          typeof data?.summary === 'string' ? clampToWordLimit(data.summary, researchWordLimit) : '';
+        const existing = research[lead.id];
+        const shouldOverrideSummary =
+          summaryFromApi && (options?.forceRefresh || !existing?.summary?.trim() || !existing?.approved);
+
+        if (shouldOverrideSummary && summaryFromApi) {
+          setLocalSummary(summaryFromApi);
+          setWordCount(countWords(summaryFromApi));
+          setSummaryNotice('AI summary generated. Review before approving.');
+        } else {
+          const fallbackSummary = existing?.summary ?? summaryFromApi ?? '';
+          setLocalSummary(fallbackSummary);
+          setWordCount(countWords(fallbackSummary));
+          if (existing?.approved) {
+            setSummaryNotice('Summary already approved.');
+          }
+        }
+
+        onUpdateResearch(lead.id, (prev) => {
+          const nextSummary = shouldOverrideSummary
+            ? summaryFromApi
+            : prev.summary || summaryFromApi || '';
+          const trimmedSummary = nextSummary ? clampToWordLimit(nextSummary, researchWordLimit) : '';
+          return {
+            ...prev,
+            summary: trimmedSummary,
+            approved: shouldOverrideSummary ? false : prev.approved && Boolean(trimmedSummary),
+            results,
+            query: typeof data?.query === 'string' ? data.query : googleQuery(lead),
+            lastFetchedAt: typeof data?.fetchedAt === 'string' ? data.fetchedAt : new Date().toISOString(),
+          };
+        });
+      } catch (error) {
+        console.error('Lead research fetch failed', error);
+        const message = error instanceof Error ? error.message : 'Failed to run search';
+        setFetchError(message);
+      } finally {
+        setIsResearchLoading(false);
+      }
+    },
+    [googleQuery, onUpdateResearch, research, researchWordLimit]
+  );
+
+  const handleOpenResearch = useCallback(
+    (lead: Lead) => {
+      setActiveLead(lead);
+      const entry = research[lead.id];
+      const summary = entry?.summary ?? '';
+      setLocalSummary(summary);
+      setWordCount(countWords(summary));
+      setLocalResults(entry?.results ?? []);
+      setFetchError(null);
+      setSummaryError(null);
+      setSummaryNotice(entry?.approved ? 'Summary approved.' : null);
+      if (!entry?.results?.length) {
+        void runResearchFetch(lead);
+      }
+    },
+    [research, runResearchFetch]
+  );
+
+  const handleCloseResearch = useCallback(() => {
+    setActiveLead(null);
+    setLocalResults([]);
+    setLocalSummary('');
+    setWordCount(0);
+    setIsResearchLoading(false);
+    setFetchError(null);
+    setSummaryError(null);
+    setSummaryNotice(null);
+  }, []);
+
+  const handleSummaryChange = (value: string) => {
+    if (!activeLead) return;
+    const limited = clampToWordLimit(value, researchWordLimit);
+    setLocalSummary(limited);
+    setWordCount(countWords(limited));
+    setSummaryError(null);
+    setSummaryNotice(null);
+    onUpdateResearch(activeLead.id, (prev) => ({
+      ...prev,
+      summary: limited,
+      approved: false,
+    }));
+  };
+
+  const handleApproveSummary = () => {
+    if (!activeLead) return;
+    const trimmed = localSummary.trim();
+    const words = countWords(trimmed);
+    if (!trimmed) {
+      setSummaryError('Add a summary before approving.');
+      return;
+    }
+    if (words > researchWordLimit) {
+      setSummaryError(`Keep the summary within ${researchWordLimit} words.`);
+      return;
+    }
+    setSummaryError(null);
+    onUpdateResearch(activeLead.id, (prev) => ({
+      ...prev,
+      summary: trimmed,
+      approved: true,
+    }));
+    setSummaryNotice('Summary approved for personalization.');
+  };
+
+  const handleResetApproval = () => {
+    if (!activeLead) return;
+    onUpdateResearch(activeLead.id, (prev) => ({
+      ...prev,
+      approved: false,
+    }));
+    setSummaryNotice('Approval removed – update the summary before approving again.');
+  };
+
+  const activeEntry = activeLead ? research[activeLead.id] : undefined;
+  const isSummaryApproved = Boolean(activeEntry?.approved && activeEntry.summary?.trim());
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {showLinkedInCard ? (
         <Card className="rounded-2xl lg:col-span-3 flex flex-col max-h-[calc(100vh-220px)]">
           <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <CardTitle>LinkedIn Enrichment</CardTitle>
+              <CardTitle>AI Research & LinkedIn Enrichment</CardTitle>
               <CardDescription>
-                Use the uploaded CSV fields (first name, last name, company name, company URL) to find and attach each lead&apos;s LinkedIn profile.
+                Let GPT-4o surface recent insights and capture LinkedIn URLs so every lead has a 100-word summary ready for personalization.
               </CardDescription>
             </div>
             <Button
@@ -1275,79 +1493,99 @@ function EnrichScreen({
                 <TableHead>Lead</TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Website</TableHead>
-                <TableHead>Search</TableHead>
+                <TableHead>AI Research</TableHead>
                 <TableHead>LinkedIn URL</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {leads.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback>
-                          {l.firstName[0]}
-                          {l.lastName[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <div className="font-medium">
-                          {l.firstName} {l.lastName}
+              {leads.map((l) => {
+                const researchEntry = research[l.id];
+                const summaryApproved = Boolean(researchEntry?.approved && researchEntry.summary?.trim());
+                const researchStatusLabel = summaryApproved
+                  ? 'Approved'
+                  : researchEntry?.summary
+                    ? 'Needs approval'
+                    : 'Not started';
+                const summaryPreview = researchEntry?.summary ?? '';
+                const researchWordCount = countWords(researchEntry?.summary ?? '');
+
+                return (
+                  <TableRow key={l.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback>
+                            {l.firstName[0]}
+                            {l.lastName[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <div className="font-medium">
+                            {l.firstName} {l.lastName}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{l.title}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground">{l.title}</div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{l.company}</TableCell>
-                  <TableCell className="max-w-[220px] truncate">
-                    {l.website ? (
-                      <a
-                        href={l.website}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary underline-offset-4 hover:underline"
-                      >
-                        {l.website}
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => window.open(googleQuery(l), "_blank")}
-                      >
-                        <Search className="mr-2 h-4 w-4" /> Google
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => window.open(linkedinPeopleQuery(l), "_blank")}
-                      >
-                        <Linkedin className="mr-2 h-4 w-4" /> LinkedIn
-                      </Button>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        placeholder="https://www.linkedin.com/in/..."
-                        defaultValue={l.linkedin || ""}
-                        onBlur={(e) => onSetLinkedIn(l.id, e.currentTarget.value)}
-                        className="rounded-xl w-[320px]"
-                      />
-                      <Badge variant="outline" className="rounded-xl capitalize">
-                        {l.status}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>{l.company}</TableCell>
+                    <TableCell className="max-w-[220px] truncate">
+                      {l.website ? (
+                        <a
+                          href={l.website}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline-offset-4 hover:underline"
+                        >
+                          {l.website}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-xl"
+                          onClick={() => handleOpenResearch(l)}
+                        >
+                          <Sparkles className="mr-2 h-4 w-4" /> AI Research
+                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant={summaryApproved ? 'secondary' : researchEntry?.summary ? 'outline' : 'destructive'}
+                            className="rounded-xl"
+                          >
+                            {researchStatusLabel}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">
+                            {researchWordCount}/{researchWordLimit} words
+                          </span>
+                        </div>
+                        {summaryPreview && (
+                          <div className="text-xs text-muted-foreground line-clamp-2 max-w-[260px]">
+                            {summaryPreview}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          placeholder="https://www.linkedin.com/in/..."
+                          defaultValue={l.linkedin || ''}
+                          onBlur={(e) => onSetLinkedIn(l.id, e.currentTarget.value)}
+                          className="rounded-xl w-[260px]"
+                        />
+                        <Badge variant="outline" className="rounded-xl capitalize">
+                          {l.status}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           </CardContent>
@@ -1373,6 +1611,148 @@ function EnrichScreen({
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!activeLead} onOpenChange={(isOpen) => { if (!isOpen) handleCloseResearch(); }}>
+        <DialogContent className="max-w-3xl rounded-2xl">
+          {activeLead && (
+            <>
+              <DialogHeader>
+                <DialogTitle>AI research – {activeLead.firstName} {activeLead.lastName}</DialogTitle>
+                <DialogDescription>{activeLead.company} · {activeLead.email}</DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => window.open(googleQuery(activeLead), "_blank", "noopener")}
+                  >
+                    <Search className="mr-2 h-4 w-4" /> Open Google Search
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="rounded-xl"
+                    onClick={() => activeLead && runResearchFetch(activeLead, { forceRefresh: true })}
+                    disabled={isResearchLoading}
+                  >
+                    {isResearchLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Searching…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" /> Refresh AI summary
+                      </>
+                    )}
+                  </Button>
+                  {activeLead.website && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => window.open(activeLead.website!, "_blank", "noopener")}
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" /> View website
+                    </Button>
+                  )}
+                </div>
+
+                {fetchError && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    {fetchError}
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="text-sm font-medium">Search results</div>
+                  <ScrollArea className="h-[220px] rounded-2xl border">
+                    <div className="p-3 space-y-3">
+                      {isResearchLoading && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Pulling search results…
+                        </div>
+                      )}
+                      {!isResearchLoading && localResults.length === 0 && (
+                        <div className="text-sm text-muted-foreground">
+                          No results yet. Try refreshing or open Google directly.
+                        </div>
+                      )}
+                      {localResults.map((result, index) => (
+                        <div key={`${result.link}-${index}`} className="rounded-xl border bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <a
+                                href={result.link}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm font-medium underline-offset-4 hover:underline"
+                              >
+                                {result.title}
+                              </a>
+                              <div className="text-[11px] text-muted-foreground break-all">{result.link}</div>
+                            </div>
+                            <Button variant="ghost" size="icon" className="rounded-full" asChild>
+                              <a href={result.link} target="_blank" rel="noreferrer">
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
+                            </Button>
+                          </div>
+                          <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
+                            {result.snippet || 'No snippet provided.'}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="lead-research-summary">AI summary</Label>
+                    <span className="text-xs text-muted-foreground">{wordCount}/{researchWordLimit} words</span>
+                  </div>
+                  <Textarea
+                    id="lead-research-summary"
+                    value={localSummary}
+                    onChange={(e) => handleSummaryChange(e.target.value)}
+                    placeholder="Capture the most relevant insights in up to 100 words."
+                    className="min-h-[140px] rounded-2xl"
+                  />
+                  {summaryError && <div className="text-xs text-destructive">{summaryError}</div>}
+                  {summaryNotice && <div className="text-xs text-primary">{summaryNotice}</div>}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    Approved summaries are injected into the email generation prompt.
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={handleResetApproval}
+                      disabled={!isSummaryApproved}
+                    >
+                      <X className="mr-2 h-4 w-4" /> Unapprove
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={handleApproveSummary}
+                    >
+                      <BadgeCheck className="mr-2 h-4 w-4" /> Approve summary
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
@@ -2269,6 +2649,7 @@ export default function SalesAutomationUI() {
   );
   const [subject] = useState<string>("Quick idea for {{company}}");
   const [emails, setEmails] = useState<Record<string, GeneratedEmail>>({});
+  const [leadResearch, setLeadResearch] = useState<Record<string, LeadResearchState>>({});
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState(0);
   const [batchSize, setBatchSize] = useState(20);
@@ -2405,6 +2786,20 @@ export default function SalesAutomationUI() {
       });
     },
     [currentListId, syncLeadListLeads]
+  );
+
+  const updateLeadResearch = useCallback(
+    (leadId: string, updater: Partial<LeadResearchState> | ((previous: LeadResearchState) => LeadResearchState)) => {
+      if (!leadId) return;
+      setLeadResearch((prev) => {
+        const existing = prev[leadId] ?? { summary: '', approved: false, results: [], query: '', lastFetchedAt: undefined };
+        const nextValue = typeof updater === 'function'
+          ? (updater as (previous: LeadResearchState) => LeadResearchState)(existing)
+          : { ...existing, ...updater };
+        return { ...prev, [leadId]: nextValue };
+      });
+    },
+    []
   );
 
   const resetToSampleLeadList = useCallback(() => {
@@ -2971,6 +3366,12 @@ export default function SalesAutomationUI() {
       const baseSubject = tokenFill(subject, lead) || `Quick intro for ${lead.company}`;
       const baseTemplate = tokenFill(template, lead);
       const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}\n\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic. Respond with valid JSON in the shape {"subject": "...", "body": "..."}.`;
+      const approvedResearchSummary = (() => {
+        const research = leadResearch[lead.id];
+        if (!research?.approved) return '';
+        const summary = research.summary?.trim();
+        return summary || '';
+      })();
 
       const response = await fetch("/api/generate-email", {
         method: "POST",
@@ -2978,6 +3379,16 @@ export default function SalesAutomationUI() {
         body: JSON.stringify({
           system: activePrompt?.content ?? DEFAULT_PROMPT_CONTENT,
           prompt,
+          researchSummary: approvedResearchSummary || undefined,
+          lead: {
+            id: lead.id,
+            firstName: lead.firstName,
+            lastName: lead.lastName,
+            company: lead.company,
+            title: lead.title,
+            website: lead.website,
+            linkedin: lead.linkedin,
+          },
         }),
       });
 
@@ -3123,13 +3534,20 @@ export default function SalesAutomationUI() {
     updateLeads((prev) => prev.filter((l) => l.id !== leadId));
     // Also remove any generated email entry tied to that lead
     setEmails((prev) => {
-      const { [leadId]: _, ...rest } = prev;
-      return rest;
+      const next = { ...prev };
+      delete next[leadId];
+      return next;
+    });
+    setLeadResearch((prev) => {
+      const next = { ...prev };
+      delete next[leadId];
+      return next;
     });
   };
   const clearLeads = () => {
     updateLeads([]);
     setEmails({});
+    setLeadResearch({});
   };
 
   const renameList = useCallback((id: string, name: string) => {
@@ -3228,8 +3646,11 @@ export default function SalesAutomationUI() {
             {section === "enrich" && (
               <EnrichScreen
                 leads={leads}
+                research={leadResearch}
+                researchWordLimit={RESEARCH_SUMMARY_WORD_LIMIT}
                 onSetLinkedIn={setLinkedInForLead}
                 onBulkMarkEnriched={bulkMarkEnriched}
+                onUpdateResearch={updateLeadResearch}
               />
             )}
 
