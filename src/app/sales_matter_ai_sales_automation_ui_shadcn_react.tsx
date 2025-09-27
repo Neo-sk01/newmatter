@@ -1603,18 +1603,19 @@ function EnrichScreen({
       )}
 
       <Dialog open={!!activeLead} onOpenChange={(isOpen) => { if (!isOpen) handleCloseResearch(); }}>
-        <DialogContent className="w-[95vw] lg:w-[82vw] xl:w-[75vw] max-w-[100rem] rounded-2xl">
+        <DialogContent className="w-[95vw] lg:w-[82vw] xl:w-[75vw] max-w-[100rem] max-h-[90vh] overflow-hidden rounded-2xl">
           {activeLead && (
             <>
               <DialogHeader>
                 <DialogTitle>AI research – {activeLead.firstName} {activeLead.lastName}</DialogTitle>
                 <DialogDescription>{activeLead.company} · {activeLead.email}</DialogDescription>
               </DialogHeader>
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
+              <ScrollArea className="max-h-[calc(90vh-8rem)] pr-4">
+                <div className="flex flex-col gap-4 pr-2 pb-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
                         variant="outline"
                         size="sm"
                         className="rounded-xl"
@@ -1751,7 +1752,8 @@ function EnrichScreen({
                     </Button>
                   </div>
                 </div>
-              </div>
+                </div>
+              </ScrollArea>
             </>
           )}
         </DialogContent>
@@ -2152,20 +2154,24 @@ function ReviewScreen({
                           <DialogTrigger asChild>
                             <Button variant="outline" size="sm" className="rounded-xl">Open</Button>
                           </DialogTrigger>
-                          <DialogContent className="rounded-2xl max-w-2xl">
+                          <DialogContent className="rounded-2xl max-w-2xl max-h-[90vh] overflow-hidden">
                             <DialogHeader>
                               <DialogTitle>{ge?.subject}</DialogTitle>
                               <DialogDescription>To: {l.email}</DialogDescription>
                             </DialogHeader>
-                          <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
-                            {ge?.body}
-                          </div>
-                            {ge?.raw && (
-                              <div className="mt-3 rounded-2xl border bg-muted/10 p-3">
-                                <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
-                                <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{ge.raw}</pre>
+                            <ScrollArea className="max-h-[calc(90vh-8rem)] pr-4">
+                              <div className="space-y-3 pr-2 pb-4">
+                                <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
+                                  {ge?.body}
+                                </div>
+                                {ge?.raw && (
+                                  <div className="rounded-2xl border bg-muted/10 p-3">
+                                    <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
+                                    <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{ge.raw}</pre>
+                                  </div>
+                                )}
                               </div>
-                            )}
+                            </ScrollArea>
                           </DialogContent>
                         </Dialog>
                       </TableCell>
