@@ -91,7 +91,6 @@ export async function POST(req: NextRequest) {
       result = await generateText({
         model,
         prompt,
-        temperature: 0.4,
         maxOutputTokens: 500,
         tools: [
           openai.tools.webSearchPreview({

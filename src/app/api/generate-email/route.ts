@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       ? `${prompt.trim()}\n\nApproved research summary (max 100 words):\n${researchSummary}\n\nPersonalize the outreach by referencing at least one insight from the summary. Do not repeat the summary verbatim.`
       : prompt;
 
-    const result = await streamText({
+    const result = await generateText({
       model,
       system,
       prompt: compiledPrompt,
@@ -54,7 +54,14 @@ export async function POST(req: Request) {
       temperature: 0.7,
     });
 
-    return result.toTextStreamResponse();
+    const textResponse = result.text?.trim() ?? "";
+
+    return new Response(textResponse, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
   } catch (e) {
     return new Response("Failed to generate", { status: 500 });
   }

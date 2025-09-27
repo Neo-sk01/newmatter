@@ -2,8 +2,6 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { generateObject, generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
-import { jsonrepair } from "jsonrepair";
-
 // Enhanced lead schema with more validation
 const LeadSchema = z.object({
   id: z.string().optional(),
@@ -29,9 +27,9 @@ const LeadSchema = z.object({
 });
 
 // Comprehensive field mapping options
-const CanonicalField = z.enum([
+const canonicalFieldValues = [
   "firstName",
-  "lastName", 
+  "lastName",
   "fullName",
   "company",
   "email",
@@ -50,7 +48,119 @@ const CanonicalField = z.enum([
   "tags",
   "customField",
   "ignore",
-]);
+] as const;
+
+const CanonicalField = z.enum(canonicalFieldValues);
+type CanonicalFieldValue = z.infer<typeof CanonicalField>;
+
+const normalizeAliasKey = (value: string) =>
+  value
+    .trim()
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
+
+const canonicalFieldAliasMap: Record<string, CanonicalFieldValue> = {
+  firstname: "firstName",
+  fname: "firstName",
+  givenname: "firstName",
+  lastname: "lastName",
+  lname: "lastName",
+  surname: "lastName",
+  name: "fullName",
+  fullname: "fullName",
+  companyname: "company",
+  organisation: "company",
+  organization: "company",
+  employer: "company",
+  business: "company",
+  emailaddress: "email",
+  emailid: "email",
+  mail: "email",
+  phonenumber: "phone",
+  telephone: "phone",
+  mobilenumber: "phone",
+  jobtitle: "title",
+  position: "title",
+  role: "title",
+  departmentname: "department",
+  division: "department",
+  team: "department",
+  websiteurl: "website",
+  webpage: "website",
+  url: "website",
+  linkedinurl: "linkedin",
+  linkedinprofile: "linkedin",
+  linkedinhandle: "linkedin",
+  twitterhandle: "twitter",
+  twitterurl: "twitter",
+  twitterprofile: "twitter",
+  city: "location",
+  state: "location",
+  province: "location",
+  region: "location",
+  country: "location",
+  zipcode: "location",
+  postalcode: "location",
+  address: "location",
+  geography: "location",
+  industryvertical: "industry",
+  vertical: "industry",
+  sector: "industry",
+  employees: "companySize",
+  headcount: "companySize",
+  size: "companySize",
+  revenueusd: "revenue",
+  annualrevenue: "revenue",
+  sales: "revenue",
+  comment: "notes",
+  comments: "notes",
+  remark: "notes",
+  leadsource: "source",
+  sourceoflead: "source",
+  campaign: "source",
+  tag: "tags",
+  taglist: "tags",
+  labels: "tags",
+  custom: "customField",
+  customfield: "customField",
+  customfields: "customField",
+  skip: "ignore",
+  ignorefield: "ignore",
+};
+
+const CanonicalFieldSchema = z
+  .string()
+  .transform<CanonicalFieldValue>((value, ctx) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Mapping value cannot be empty",
+      });
+      return z.NEVER;
+    }
+
+    const directMatch = canonicalFieldValues.find(
+      (field) => field.toLowerCase() === trimmed.toLowerCase()
+    );
+
+    if (directMatch) {
+      return directMatch;
+    }
+
+    const aliasMatch = canonicalFieldAliasMap[normalizeAliasKey(trimmed)];
+    if (aliasMatch) {
+      return aliasMatch;
+    }
+
+    ctx.addIssue({
+      code: z.ZodIssueCode.invalid_enum_value,
+      options: canonicalFieldValues,
+      received: trimmed,
+      message: `Unsupported field mapping: ${trimmed}`,
+    });
+    return z.NEVER;
+  });
 
 // Enhanced response schema with more metadata
 const ParseResponseSchema = z.object({
@@ -167,7 +277,7 @@ Return a JSON object with:
         model: openai("gpt-4o-mini"),
         prompt: mappingPrompt,
         schema: z.object({
-          headerMapping: z.record(z.string(), CanonicalField),
+          headerMapping: z.record(z.string(), CanonicalFieldSchema),
           confidence: z.number().min(0).max(1),
           suggestions: z.array(z.string()),
           customFields: z.array(z.string()),

@@ -125,6 +125,7 @@ interface GeneratedEmail {
   leadId: string;
   subject: string;
   body: string;
+  raw?: string;
 }
 
 interface LeadResearchResult {
@@ -1543,27 +1544,16 @@ function EnrichScreen({
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-1">
+                      <div className="space-y-2">
                         <Button
-                          variant="secondary"
+                          variant="outline"
                           size="sm"
-                          className="rounded-xl"
+                          className="rounded-full bg-muted text-foreground border-transparent hover:bg-muted"
                           onClick={() => handleOpenResearch(l)}
                         >
                           <Sparkles className="mr-2 h-4 w-4" /> AI Research
                         </Button>
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant={summaryApproved ? 'secondary' : researchEntry?.summary ? 'outline' : 'destructive'}
-                            className="rounded-xl"
-                          >
-                            {researchStatusLabel}
-                          </Badge>
-                          <span className="text-[10px] text-muted-foreground">
-                            {researchWordCount}/{researchWordLimit} words
-                          </span>
-                        </div>
-                        {summaryPreview && (
+                        {summaryPreview && (researchEntry?.lastFetchedAt || researchEntry?.summary?.trim()) && (
                           <div className="text-xs text-muted-foreground line-clamp-2 max-w-[260px]">
                             {summaryPreview}
                           </div>
@@ -1613,7 +1603,7 @@ function EnrichScreen({
       )}
 
       <Dialog open={!!activeLead} onOpenChange={(isOpen) => { if (!isOpen) handleCloseResearch(); }}>
-        <DialogContent className="max-w-3xl rounded-2xl">
+        <DialogContent className="w-[95vw] lg:w-[82vw] xl:w-[75vw] max-w-[100rem] rounded-2xl">
           {activeLead && (
             <>
               <DialogHeader>
@@ -1622,41 +1612,54 @@ function EnrichScreen({
               </DialogHeader>
               <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-xl"
-                    onClick={() => window.open(googleQuery(activeLead), "_blank", "noopener")}
-                  >
-                    <Search className="mr-2 h-4 w-4" /> Open Google Search
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="rounded-xl"
-                    onClick={() => activeLead && runResearchFetch(activeLead, { forceRefresh: true })}
-                    disabled={isResearchLoading}
-                  >
-                    {isResearchLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Searching…
-                      </>
-                    ) : (
-                      <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={isResearchLoading}
+                      >
+                        {isResearchLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Working…
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-4 w-4" /> AI research actions
+                          </>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="rounded-xl w-56">
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          window.open(googleQuery(activeLead), "_blank", "noopener");
+                        }}
+                      >
+                        <Search className="mr-2 h-4 w-4" /> Open Google search
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={async (event) => {
+                          event.preventDefault();
+                          await runResearchFetch(activeLead, { forceRefresh: true });
+                        }}
+                      >
                         <Sparkles className="mr-2 h-4 w-4" /> Refresh AI summary
-                      </>
-                    )}
-                  </Button>
-                  {activeLead.website && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl"
-                      onClick={() => window.open(activeLead.website!, "_blank", "noopener")}
-                    >
-                      <ExternalLink className="mr-2 h-4 w-4" /> View website
-                    </Button>
-                  )}
+                      </DropdownMenuItem>
+                      {activeLead.website && (
+                        <DropdownMenuItem
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            window.open(activeLead.website!, "_blank", "noopener");
+                          }}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" /> View website
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
                 {fetchError && (
@@ -1786,11 +1789,12 @@ function GenerateScreen({
   }, [leads, selectedLeadId]);
 
   const previewFor = (l: Lead | null) => {
-    if (!l) return { subject: '', body: '' };
+    if (!l) return { subject: '', body: '', raw: '' };
     const ge = emails[l.id];
     return {
       subject: ge?.subject ?? tokenFill(subject, l),
       body: ge?.body ?? tokenFill(template, l),
+      raw: ge?.raw ?? '',
     };
   };
 
@@ -1866,6 +1870,14 @@ function GenerateScreen({
                 <ScrollArea className="h-[360px] rounded-2xl border">
                   <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
                 </ScrollArea>
+                {preview.raw && (
+                  <div className="grid gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
+                    <ScrollArea className="h-[160px] rounded-2xl border bg-muted/10">
+                      <pre className="whitespace-pre-wrap p-3 text-xs text-muted-foreground">{preview.raw}</pre>
+                    </ScrollArea>
+                  </div>
+                )}
                 <div className="flex items-center gap-3">
                   <Button
                     className="rounded-xl"
@@ -1983,12 +1995,13 @@ function PreviewScreenMinimal({
     return leads.find(l => l.id === id) ?? null;
   }, [leads, selectedLeadId]);
 
-  const previewFor = (l: Lead | null) => {
-    if (!l) return { subject: '', body: '' };
+const previewFor = (l: Lead | null) => {
+    if (!l) return { subject: '', body: '', raw: '' };
     const ge = emails[l.id];
     return {
       subject: ge?.subject ?? tokenFill(subject, l),
       body: ge?.body ?? tokenFill(template, l),
+      raw: ge?.raw ?? '',
     };
   };
 
@@ -2014,6 +2027,14 @@ function PreviewScreenMinimal({
                 <ScrollArea className="h-[360px] rounded-2xl border">
                   <pre className="whitespace-pre-wrap p-3 bg-muted/30 text-sm">{preview.body || '(No content)'}</pre>
                 </ScrollArea>
+                {preview.raw && (
+                  <div className="grid gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
+                    <ScrollArea className="h-[160px] rounded-2xl border bg-muted/10">
+                      <pre className="whitespace-pre-wrap p-3 text-xs text-muted-foreground">{preview.raw}</pre>
+                    </ScrollArea>
+                  </div>
+                )}
                 <div className="flex items-center gap-3">
                   <Button
                     className="rounded-xl"
@@ -2136,9 +2157,15 @@ function ReviewScreen({
                               <DialogTitle>{ge?.subject}</DialogTitle>
                               <DialogDescription>To: {l.email}</DialogDescription>
                             </DialogHeader>
-                            <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
-                              {ge?.body}
-                            </div>
+                          <div className="rounded-2xl border p-3 bg-muted/30 whitespace-pre-wrap">
+                            {ge?.body}
+                          </div>
+                            {ge?.raw && (
+                              <div className="mt-3 rounded-2xl border bg-muted/10 p-3">
+                                <span className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
+                                <pre className="whitespace-pre-wrap text-xs text-muted-foreground">{ge.raw}</pre>
+                              </div>
+                            )}
                           </DialogContent>
                         </Dialog>
                       </TableCell>
@@ -2192,6 +2219,14 @@ function ReviewScreen({
                   className="min-h-[220px] rounded-2xl"
                   onChange={(e) => onEdit(drawerLead.id, { ...emails[drawerLead.id], body: e.target.value })}
                 />
+                {emails[drawerLead.id]?.raw && (
+                  <div className="grid gap-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Raw response</span>
+                    <ScrollArea className="max-h-[160px] rounded-2xl border bg-muted/10">
+                      <pre className="whitespace-pre-wrap p-3 text-xs text-muted-foreground">{emails[drawerLead.id]?.raw}</pre>
+                    </ScrollArea>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" className="rounded-xl" onClick={() => setDrawerLead(null)}>Close</Button>
                   <Button className="rounded-xl" onClick={() => { onApprove(drawerLead.id, true); setDrawerLead(null); }}>
@@ -3365,13 +3400,16 @@ export default function SalesAutomationUI() {
     try {
       const baseSubject = tokenFill(subject, lead) || `Quick intro for ${lead.company}`;
       const baseTemplate = tokenFill(template, lead);
-      const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}\n\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic. Respond with valid JSON in the shape {"subject": "...", "body": "..."}.`;
       const approvedResearchSummary = (() => {
         const research = leadResearch[lead.id];
         if (!research?.approved) return '';
         const summary = research.summary?.trim();
         return summary || '';
       })();
+      const researchSummarySection = approvedResearchSummary
+        ? `\nResearch summary (approved):\n${approvedResearchSummary}\n`
+        : '';
+      const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}${researchSummarySection}\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic. Respond with valid JSON in the shape {"subject": "...", "body": "..."}.`;
 
       const response = await fetch("/api/generate-email", {
         method: "POST",
@@ -3437,6 +3475,7 @@ export default function SalesAutomationUI() {
           leadId: lead.id,
           subject: nextSubject || baseSubject,
           body: nextBody || baseTemplate,
+          raw,
         },
       }));
 
