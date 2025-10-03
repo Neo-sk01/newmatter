@@ -411,7 +411,9 @@ Return a JSON object with:
           if (!value || value === "" || targetField === "ignore") continue;
           
           if (targetField === "customField") {
-            lead.customFields[originalColumn] = value;
+            // Type-safe custom field assignment
+            const customFields = lead.customFields as Record<string, unknown>;
+            customFields[originalColumn] = value;
           } else if (targetField === "tags" && typeof value === "string") {
             lead.tags = value.split(",").map((tag: string) => tag.trim()).filter(Boolean);
           } else {
@@ -420,8 +422,8 @@ Return a JSON object with:
         }
 
         // Handle full name splitting
-        if (lead.fullName && !lead.firstName && !lead.lastName) {
-          const nameParts = lead.fullName.trim().split(/\s+/);
+        if (lead.fullName && typeof lead.fullName === "string" && !lead.firstName && !lead.lastName) {
+          const nameParts = (lead.fullName as string).trim().split(/\s+/);
           if (nameParts.length >= 2) {
             lead.firstName = nameParts[0];
             lead.lastName = nameParts.slice(1).join(" ");
@@ -431,18 +433,19 @@ Return a JSON object with:
         }
 
         // Email validation
-        if (lead.email) {
+        if (lead.email && typeof lead.email === "string") {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (emailRegex.test(lead.email)) {
-            lead.email = lead.email.toLowerCase();
+          const emailStr = lead.email as string;
+          if (emailRegex.test(emailStr)) {
+            lead.email = emailStr.toLowerCase();
             emailStats.valid++;
             
             // Duplicate detection
-            if (options.detectDuplicates && seenEmails.has(lead.email)) {
+            if (options.detectDuplicates && seenEmails.has(lead.email as string)) {
               duplicates++;
               continue; // Skip duplicate
             }
-            seenEmails.add(lead.email);
+            seenEmails.add(lead.email as string);
           } else {
             emailStats.invalid++;
             errors.push({
@@ -463,11 +466,17 @@ Return a JSON object with:
         if (lead.email || lead.phone) completenessStats.hasContact++;
 
         // URL validation and normalization
-        if (lead.website && !lead.website.startsWith("http")) {
-          lead.website = `https://${lead.website}`;
+        if (lead.website && typeof lead.website === "string") {
+          const websiteStr = lead.website as string;
+          if (!websiteStr.startsWith("http")) {
+            lead.website = `https://${websiteStr}`;
+          }
         }
-        if (lead.linkedin && !lead.linkedin.startsWith("http")) {
-          lead.linkedin = `https://linkedin.com/in/${lead.linkedin}`;
+        if (lead.linkedin && typeof lead.linkedin === "string") {
+          const linkedinStr = lead.linkedin as string;
+          if (!linkedinStr.startsWith("http")) {
+            lead.linkedin = `https://linkedin.com/in/${linkedinStr}`;
+          }
         }
 
         // Skip empty rows if option is set

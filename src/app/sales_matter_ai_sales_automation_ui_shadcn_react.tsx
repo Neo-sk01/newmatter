@@ -3210,63 +3210,79 @@ export default function SalesAutomationUI() {
       let useEnhancedParser = true;
       
       try {
-        console.log('Using enhanced AI-powered CSV parser...');
-        const enhancedResp = await fetch("/api/parse-csv", {
+        console.log('🚀 Using Vercel AI SDK-powered CSV parser...');
+        const enhancedResp = await fetch("/api/parse-csv-ai", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             columns,
             rows,
-            options: {
-              skipEmptyRows: true,
-              validateEmails: true,
-              detectDuplicates: true,
-              maxRows: 10000,
-            }
           }),
         });
 
         if (enhancedResp.ok) {
-          const enhancedResult = await enhancedResp.json();
+          const aiResult = await enhancedResp.json();
           
-          if (enhancedResult.success) {
-            console.log('Enhanced parser successful:', {
-              totalRows: enhancedResult.totalRows,
-              validRows: enhancedResult.validRows,
-              dataQuality: enhancedResult.dataQuality,
-              suggestions: enhancedResult.suggestions
+          if (aiResult.success && aiResult.leads && aiResult.leads.length > 0) {
+            console.log('✅ AI parser successful:', {
+              totalRows: aiResult.totalRows,
+              validLeads: aiResult.validLeads,
+              skippedRows: aiResult.skippedRows,
+              processingTime: aiResult.processingTime,
+              qualityMetrics: aiResult.qualityMetrics,
             });
             
-            // Convert enhanced result to Lead format
-            mapped = enhancedResult.leads.map((lead: any, idx: number) => ({
-              id: lead.id || `${Date.now()}-${idx}`,
-              firstName: lead.firstName || "",
-              lastName: lead.lastName || "",
-              company: lead.company || "",
-              email: (lead.email || "").toLowerCase(),
-              title: lead.title || "",
-              website: lead.website || undefined,
-              linkedin: lead.linkedin || undefined,
-              status: "new" as const,
+            // AI already returns properly formatted leads
+            mapped = aiResult.leads.map((lead: Lead) => ({
+              id: lead.id,
+              firstName: lead.firstName,
+              lastName: lead.lastName,
+              company: lead.company,
+              email: lead.email,
+              title: lead.title,
+              website: lead.website,
+              linkedin: lead.linkedin,
+              phone: lead.phone,
+              location: lead.location,
+              industry: lead.industry,
+              status: lead.status || "new" as const,
             }));
             
-            // Show data quality info if available
-            if (enhancedResult.dataQuality?.emailValidation?.invalid > 0) {
-              console.warn(`Note: ${enhancedResult.dataQuality.emailValidation.invalid} invalid emails were cleaned`);
+            console.log(`📊 Imported ${mapped.length} leads ready for email generation`);
+            
+            // Immediately add leads to state for Lead Preview
+            setLeads((prev) => {
+              const newLeads = [...prev, ...mapped];
+              console.log(`✅ Added ${mapped.length} leads to Lead Preview. Total: ${newLeads.length}`);
+              return newLeads;
+            });
+            
+            // Show success message
+            setImportError(null);
+            console.log(`🎉 Success! ${mapped.length} leads now visible in Lead Preview table`);
+            
+            // Show warnings if available
+            if (aiResult.warnings && aiResult.warnings.length > 0) {
+              console.warn('⚠️ Import warnings:', aiResult.warnings.slice(0, 5));
             }
-            if (enhancedResult.dataQuality?.duplicates > 0) {
-              console.warn(`Note: ${enhancedResult.dataQuality.duplicates} duplicate entries were removed`);
+            
+            if (aiResult.skippedRows > 0) {
+              console.warn(`⚠️ Skipped ${aiResult.skippedRows} rows due to missing data`);
             }
+            
+            // Early return - we're done!
+            setImporting(false);
+            return;
           } else {
-            console.warn('Enhanced parser returned error, falling back...');
+            console.warn('❌ AI parser returned no leads, falling back...');
             useEnhancedParser = false;
           }
         } else {
-          console.warn('Enhanced parser not available, falling back...');
+          console.warn('❌ AI parser unavailable, falling back...');
           useEnhancedParser = false;
         }
       } catch (enhancedError) {
-        console.warn('Enhanced parser failed, using fallback:', enhancedError);
+        console.error('❌ AI parser error:', enhancedError);
         useEnhancedParser = false;
       }
       
@@ -3325,6 +3341,18 @@ export default function SalesAutomationUI() {
         return;
       }
 
+      // Immediately add leads to state for Lead Preview
+      console.log(`📊 Adding ${mapped.length} leads from fallback parser to Lead Preview`);
+      setLeads((prev) => {
+        const newLeads = [...prev, ...mapped];
+        console.log(`✅ Added ${mapped.length} leads to Lead Preview. Total: ${newLeads.length}`);
+        return newLeads;
+      });
+      
+      // Show success message
+      setImportError(null);
+      console.log(`🎉 Success! ${mapped.length} leads now visible in Lead Preview table`);
+
       // Create a new lead list (folder) for each uploaded file
       const base = (file?.name || "Imported").replace(/\.[^/.]+$/, "");
       let createdList: LeadList | null = null;
@@ -3364,7 +3392,7 @@ export default function SalesAutomationUI() {
       
       // Make sure leads are properly set
       const leadsToSet = listToAdd.leads || mapped;
-      console.log('Setting leads:', leadsToSet);
+      console.log('Setting leads for lead list:', leadsToSet);
       updateLeads(leadsToSet, listToAdd.id);
       
       if (leadsToSet.length > 0) {
@@ -3375,7 +3403,7 @@ export default function SalesAutomationUI() {
       // setSection("enrich");
       
       // Show success message
-      console.log(`Successfully imported ${leadsToSet.length} leads!`);
+      console.log(`✅ Successfully imported ${leadsToSet.length} leads!`);
     } catch (err) {
       console.error("Import failed", err);
       const message = err instanceof Error ? err.message : 'Failed to import CSV. Please try again.';

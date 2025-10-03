@@ -111,36 +111,67 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
         throw new Error('CSV file appears empty or missing headers');
       }
 
-      // Send to enhanced parsing API
-      console.log('Sending CSV data to /api/parse-csv', {
+      // Send to AI-powered parsing API
+      console.log('🚀 Sending CSV data to /api/parse-csv-ai', {
         columnCount: columns.length,
         rowCount: rows.length,
         columns: columns
       });
 
-      const response = await fetch('/api/parse-csv', {
+      const response = await fetch('/api/parse-csv-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           columns,
           rows,
-          options: {
-            skipEmptyRows: true,
-            validateEmails: true,
-            detectDuplicates: true,
-            maxRows: 10000,
-          }
         }),
       });
 
-      console.log('API response status:', response.status, response.statusText);
+      console.log('📥 API response status:', response.status, response.statusText);
 
-      const parseResult: ParsedResult = await response.json();
-      console.log('Parse result:', parseResult);
+      const aiResult = await response.json();
+      console.log('🤖 AI Parse result:', aiResult);
+      console.log('✅ Leads parsed:', aiResult.leads?.length || 0);
+      console.log('📊 Success status:', aiResult.success);
+
+      // Convert AI result to ParsedResult format
+      const parseResult: ParsedResult = {
+        success: aiResult.success,
+        totalRows: aiResult.totalRows || rows.length,
+        validRows: aiResult.validLeads || aiResult.leads?.length || 0,
+        skippedRows: aiResult.skippedRows || 0,
+        headerMapping: {}, // AI handles mapping internally
+        dataQuality: {
+          emailValidation: {
+            valid: aiResult.qualityMetrics?.hasValidEmail || 0,
+            invalid: 0,
+            missing: 0,
+          },
+          completeness: {
+            hasName: aiResult.qualityMetrics?.hasName || 0,
+            hasCompany: aiResult.qualityMetrics?.hasCompany || 0,
+            hasContact: aiResult.qualityMetrics?.hasValidEmail || 0,
+          },
+          duplicates: 0,
+        },
+        leads: aiResult.leads || [],
+        errors: [],
+        suggestions: aiResult.warnings || [],
+        customFields: [],
+        processingTime: aiResult.processingTime || 0,
+        fallbackRequired: aiResult.fallbackRequired,
+      };
+      
+      console.log('📋 Formatted result with', parseResult.leads.length, 'leads');
       
       // Check if we need to use fallback
       if (!response.ok || !parseResult.success || parseResult.fallbackRequired) {
         console.warn('Enhanced AI parsing unavailable, using fallback parser');
+        console.log('Fallback reason:', { 
+          responseOk: response.ok, 
+          parseSuccess: parseResult.success, 
+          fallbackRequired: parseResult.fallbackRequired 
+        });
         
         // Use the fallback import from utils
         const { enhancedCSVImport } = await import('@/utils/enhancedCSVImport');
@@ -150,8 +181,10 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
           throw new Error('Failed to parse CSV file');
         }
         
+        console.log('Fallback result leads count:', fallbackResult.leads.length);
+        
         // Convert fallback result to ParsedResult format
-        setResult({
+        const fallbackParsedResult: ParsedResult = {
           success: true,
           totalRows: fallbackResult.totalRows,
           validRows: fallbackResult.validRows,
@@ -163,11 +196,15 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
           suggestions: fallbackResult.suggestions || ['Consider configuring OpenAI API for better results'],
           customFields: [],
           processingTime: fallbackResult.processingTime,
-        });
+        };
+        
+        console.log('Setting fallback result, leads count:', fallbackParsedResult.leads.length);
+        setResult(fallbackParsedResult);
         setStep('results');
         return;
       }
 
+      console.log('Setting main parse result, leads count:', parseResult.leads.length);
       setResult(parseResult);
       setStep('results');
 
@@ -199,10 +236,19 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
   };
 
   const handleImport = () => {
+    console.log('handleImport called');
+    console.log('result:', result);
+    console.log('result.leads:', result?.leads);
+    console.log('result.leads.length:', result?.leads?.length);
+    
     if (result?.leads) {
+      console.log('Calling onImportComplete with', result.leads.length, 'leads');
+      console.log('First 3 leads:', result.leads.slice(0, 3));
       onImportComplete(result.leads);
       setResult(null);
       setStep('upload');
+    } else {
+      console.error('No leads found in result');
     }
   };
 
@@ -246,6 +292,11 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
   }
 
   if (step === 'results' && result) {
+    console.log('Rendering results step');
+    console.log('result object:', result);
+    console.log('result.leads array:', result.leads);
+    console.log('result.leads.length:', result.leads?.length);
+    
     const qualityScore = Math.round(
       ((result.dataQuality.emailValidation.valid / Math.max(1, result.totalRows)) * 40) +
       ((result.dataQuality.completeness.hasName / Math.max(1, result.totalRows)) * 30) +
@@ -367,6 +418,40 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+
+            {/* Lead Preview */}
+            {result.leads && result.leads.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold">Lead Preview (First 5)</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2 bg-gray-50">Name</th>
+                        <th className="text-left p-2 bg-gray-50">Email</th>
+                        <th className="text-left p-2 bg-gray-50">Company</th>
+                        <th className="text-left p-2 bg-gray-50">Title</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.leads.slice(0, 5).map((lead, i) => (
+                        <tr key={i} className="border-b hover:bg-gray-50">
+                          <td className="p-2">{lead.firstName} {lead.lastName}</td>
+                          <td className="p-2">{lead.email || '-'}</td>
+                          <td className="p-2">{lead.company || '-'}</td>
+                          <td className="p-2">{lead.title || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {result.leads.length > 5 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      ... and {result.leads.length - 5} more leads
+                    </p>
+                  )}
+                </div>
               </div>
             )}
 

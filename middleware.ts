@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
+import type { NextFetchEvent, NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 
 const isProtectedRoute = createRouteMatcher([
@@ -7,8 +8,16 @@ const isProtectedRoute = createRouteMatcher([
   '/api/protected(.*)',
 ])
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isProtectedRoute(req)) return
+const isPublicUnauthenticatedApiRoute = createRouteMatcher([
+  '/api/generate-email',
+  '/api/lead-research',
+  '/api/map-csv',
+])
+
+const baseClerkMiddleware = clerkMiddleware(async (auth, req) => {
+  if (!isProtectedRoute(req)) {
+    return
+  }
 
   const { userId } = await auth()
   if (userId) return
@@ -26,6 +35,14 @@ export default clerkMiddleware(async (auth, req) => {
   // Fallback to default Clerk protection
   await auth.protect()
 })
+
+export default function middleware(req: NextRequest, event: NextFetchEvent) {
+  if (isPublicUnauthenticatedApiRoute(req)) {
+    return NextResponse.next()
+  }
+
+  return baseClerkMiddleware(req, event)
+}
 
 export const config = {
   matcher: [
