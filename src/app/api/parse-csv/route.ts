@@ -212,11 +212,66 @@ const RequestSchema = z.object({
   })),
 });
 
+// Handle GET requests with helpful error
+export async function GET() {
+  return new Response(JSON.stringify({
+    error: "Method not allowed",
+    message: "This endpoint only accepts POST requests with CSV data",
+    expectedPayload: {
+      columns: ["array", "of", "header", "names"],
+      rows: [{ "header": "value" }],
+      options: {
+        skipEmptyRows: true,
+        validateEmails: true,
+        detectDuplicates: true,
+        maxRows: 10000
+      }
+    }
+  }), {
+    status: 405,
+    headers: { 
+      "Content-Type": "application/json",
+      "Allow": "POST"
+    }
+  });
+}
+
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   
   try {
-    const body = await req.json();
+    const rawBody = await req.text();
+
+    if (!rawBody || !rawBody.trim()) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Request body is empty",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error("Failed to parse request JSON:", parseError);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Invalid JSON payload",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
     const parsed = RequestSchema.safeParse(body);
     
     if (!parsed.success) {
@@ -277,7 +332,7 @@ Return a JSON object with:
         model: openai("gpt-4o-mini"),
         prompt: mappingPrompt,
         schema: z.object({
-          headerMapping: z.record(z.string(), CanonicalFieldSchema),
+          headerMapping: z.record(z.string(), z.string()),
           confidence: z.number().min(0).max(1),
           suggestions: z.array(z.string()),
           customFields: z.array(z.string()),
@@ -298,26 +353,59 @@ Return a JSON object with:
       });
     }
 
+    const normalizedHeaderMapping: Record<string, CanonicalFieldValue> = {};
+    const mappingIssues: string[] = [];
+
+    for (const [column, target] of Object.entries(
+      mappingResult.object.headerMapping
+    )) {
+      const parsedTarget = CanonicalFieldSchema.safeParse(target);
+      if (parsedTarget.success) {
+        normalizedHeaderMapping[column] = parsedTarget.data;
+      } else {
+        const issueMessages = parsedTarget.error.issues
+          .map((issue) => issue.message)
+          .join("; ");
+        mappingIssues.push(`${column}: ${issueMessages || "Invalid mapping"}`);
+      }
+    }
+
+    if (mappingIssues.length > 0) {
+      console.error("AI produced invalid header mappings:", mappingIssues);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "AI mapping produced invalid fields",
+          fallbackRequired: true,
+          details: mappingIssues,
+        }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Step 2: Process all rows with the AI-generated mapping
-    const processedLeads: any[] = [];
-    const errors: any[] = [];
+    const processedLeads: Array<Record<string, unknown>> = [];
+    const errors: Array<{ row: number; field: string; value: unknown; error: string }> = [];
     const seenEmails = new Set<string>();
     let duplicates = 0;
-    let emailStats = { valid: 0, invalid: 0, missing: 0 };
-    let completenessStats = { hasName: 0, hasCompany: 0, hasContact: 0 };
+    const emailStats = { valid: 0, invalid: 0, missing: 0 };
+    const completenessStats = { hasName: 0, hasCompany: 0, hasContact: 0 };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       
       try {
-        const lead: any = {
+        const lead: Record<string, unknown> = {
           id: `lead_${Date.now()}_${i}`,
           customFields: {},
           tags: [],
         };
 
         // Apply mapping
-        for (const [originalColumn, targetField] of Object.entries(mappingResult.object.headerMapping)) {
+        for (const [originalColumn, targetField] of Object.entries(normalizedHeaderMapping)) {
           const value = row[originalColumn];
           
           if (!value || value === "" || targetField === "ignore") continue;
@@ -452,7 +540,7 @@ Provide suggestions for:
       totalRows: rows.length,
       validRows: processedLeads.length,
       skippedRows: rows.length - processedLeads.length,
-      headerMapping: mappingResult.object.headerMapping,
+      headerMapping: normalizedHeaderMapping,
       dataQuality: {
         emailValidation: emailStats,
         completeness: completenessStats,

@@ -13,7 +13,7 @@ export interface Lead {
   location?: string;
   industry?: string;
   status: 'new' | 'enriched' | 'generated';
-  customFields?: Record<string, any>;
+  customFields?: Record<string, unknown>;
   tags?: string[];
 }
 
@@ -26,7 +26,7 @@ export interface ImportResult {
   errors: Array<{
     row: number;
     field: string;
-    value: any;
+    value: unknown;
     error: string;
   }>;
   dataQuality: {
@@ -99,21 +99,21 @@ export async function enhancedCSVImport(file: File): Promise<ImportResult> {
     }
 
     // Convert to Lead format
-    const leads: Lead[] = result.leads.map((lead: any, index: number) => ({
+    const leads: Lead[] = result.leads.map((lead: Record<string, unknown>, index: number) => ({
       id: `${Date.now()}-${index}`,
-      firstName: lead.firstName || "",
-      lastName: lead.lastName || "",
-      company: lead.company || "",
-      email: (lead.email || "").toLowerCase(),
-      title: lead.title || "",
-      website: lead.website || undefined,
-      linkedin: lead.linkedin || undefined,
-      phone: lead.phone || undefined,
-      location: lead.location || undefined,
-      industry: lead.industry || undefined,
+      firstName: (lead.firstName as string) || "",
+      lastName: (lead.lastName as string) || "",
+      company: (lead.company as string) || "",
+      email: ((lead.email as string) || "").toLowerCase(),
+      title: (lead.title as string) || "",
+      website: (lead.website as string) || undefined,
+      linkedin: (lead.linkedin as string) || undefined,
+      phone: (lead.phone as string) || undefined,
+      location: (lead.location as string) || undefined,
+      industry: (lead.industry as string) || undefined,
       status: "new" as const,
-      customFields: lead.customFields || {},
-      tags: lead.tags || [],
+      customFields: (lead.customFields as Record<string, unknown>) || {},
+      tags: (lead.tags as string[]) || [],
     }));
 
     return {
@@ -161,9 +161,9 @@ async function fallbackCSVImport(columns: string[], rows: Record<string, unknown
 
     // Apply mapping to all rows
     const leads: Lead[] = [];
-    const errors: any[] = [];
-    let emailStats = { valid: 0, invalid: 0, missing: 0 };
-    let completenessStats = { hasName: 0, hasCompany: 0, hasContact: 0 };
+    const errors: Array<{ row: number; field: string; value: unknown; error: string }> = [];
+    const emailStats = { valid: 0, invalid: 0, missing: 0 };
+    const completenessStats = { hasName: 0, hasCompany: 0, hasContact: 0 };
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];

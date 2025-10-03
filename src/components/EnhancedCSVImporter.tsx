@@ -21,6 +21,23 @@ import {
 } from 'lucide-react';
 import Papa from 'papaparse';
 
+interface Lead {
+  id: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+  email: string;
+  title: string;
+  website?: string;
+  linkedin?: string;
+  phone?: string;
+  location?: string;
+  industry?: string;
+  status: 'new' | 'enriched' | 'generated';
+  customFields?: Record<string, unknown>;
+  tags?: string[];
+}
+
 interface ParsedResult {
   success: boolean;
   totalRows: number;
@@ -40,20 +57,22 @@ interface ParsedResult {
     };
     duplicates: number;
   };
-  leads: any[];
+  leads: Lead[];
   errors: Array<{
     row: number;
     field: string;
-    value: any;
+    value: unknown;
     error: string;
   }>;
   suggestions: string[];
   customFields: string[];
   processingTime: number;
+  error?: string;
+  fallbackRequired?: boolean;
 }
 
 interface EnhancedCSVImporterProps {
-  onImportComplete: (leads: any[]) => void;
+  onImportComplete: (leads: Lead[]) => void;
   onError: (error: string) => void;
 }
 
@@ -93,6 +112,12 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
       }
 
       // Send to enhanced parsing API
+      console.log('Sending CSV data to /api/parse-csv', {
+        columnCount: columns.length,
+        rowCount: rows.length,
+        columns: columns
+      });
+
       const response = await fetch('/api/parse-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,14 +133,39 @@ export default function EnhancedCSVImporter({ onImportComplete, onError }: Enhan
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
+      console.log('API response status:', response.status, response.statusText);
 
       const parseResult: ParsedResult = await response.json();
+      console.log('Parse result:', parseResult);
       
-      if (!parseResult.success) {
-        throw new Error(parseResult.error || 'Failed to parse CSV');
+      // Check if we need to use fallback
+      if (!response.ok || !parseResult.success || parseResult.fallbackRequired) {
+        console.warn('Enhanced AI parsing unavailable, using fallback parser');
+        
+        // Use the fallback import from utils
+        const { enhancedCSVImport } = await import('@/utils/enhancedCSVImport');
+        const fallbackResult = await enhancedCSVImport(file);
+        
+        if (!fallbackResult.success) {
+          throw new Error('Failed to parse CSV file');
+        }
+        
+        // Convert fallback result to ParsedResult format
+        setResult({
+          success: true,
+          totalRows: fallbackResult.totalRows,
+          validRows: fallbackResult.validRows,
+          skippedRows: fallbackResult.skippedRows,
+          headerMapping: {}, // Fallback doesn't provide mapping
+          dataQuality: fallbackResult.dataQuality,
+          leads: fallbackResult.leads,
+          errors: fallbackResult.errors,
+          suggestions: fallbackResult.suggestions || ['Consider configuring OpenAI API for better results'],
+          customFields: [],
+          processingTime: fallbackResult.processingTime,
+        });
+        setStep('results');
+        return;
       }
 
       setResult(parseResult);

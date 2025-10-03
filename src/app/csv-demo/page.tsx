@@ -6,12 +6,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle2, XCircle } from 'lucide-react';
 
+interface Lead {
+  id: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+  email: string;
+  title: string;
+  website?: string;
+  linkedin?: string;
+  phone?: string;
+  location?: string;
+  industry?: string;
+  status: 'new' | 'enriched' | 'generated';
+  customFields?: Record<string, unknown>;
+  tags?: string[];
+}
+
 export default function CSVDemoPage() {
-  const [importedLeads, setImportedLeads] = useState<any[]>([]);
+  const [importedLeads, setImportedLeads] = useState<Lead[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const handleImportComplete = (leads: any[]) => {
+  const handleImportComplete = (leads: Lead[]) => {
     setImportedLeads(leads);
     setSuccess(`Successfully imported ${leads.length} leads!`);
     setError(null);
@@ -105,7 +122,7 @@ export default function CSVDemoPage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Automatically detects and preserves custom fields that don't fit standard 
+                Automatically detects and preserves custom fields that don&apos;t fit standard 
                 lead schema, ensuring no data is lost.
               </CardDescription>
             </CardContent>
@@ -161,7 +178,7 @@ export default function CSVDemoPage() {
                     {importedLeads.slice(0, 5).map((lead, i) => (
                       <tr key={i} className="border-b">
                         <td className="p-2">
-                          {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || lead.fullName || '-'}
+                          {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || '-'}
                         </td>
                         <td className="p-2">{lead.company || '-'}</td>
                         <td className="p-2">{lead.email || '-'}</td>
@@ -191,7 +208,7 @@ export default function CSVDemoPage() {
           <CardHeader>
             <CardTitle>Sample CSV Format</CardTitle>
             <CardDescription>
-              Here's an example of what your CSV might look like. The AI will intelligently map these columns:
+              Here&apos;s an example of what your CSV might look like. The AI will intelligently map these columns:
             </CardDescription>
           </CardHeader>
           <CardContent>
