@@ -3506,20 +3506,20 @@ export default function SalesAutomationUI() {
       let mapped: Lead[] = [];
       let useEnhancedParser = true;
       
-      try {
-        console.log('🚀 Using Vercel AI SDK-powered CSV parser...');
-        const enhancedResp = await fetch("/api/parse-csv-ai", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            columns,
-            rows,
-          }),
-        });
+      console.log('🚀 Using Vercel AI SDK-powered CSV parser...');
+      const enhancedResp = await fetch("/api/parse-csv-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns, rows }),
+      }).catch((enhancedError) => {
+        console.warn('❌ AI parser request failed, falling back to local mapping.', enhancedError);
+        return null;
+      });
 
-        if (enhancedResp.ok) {
+      if (enhancedResp?.ok) {
+        try {
           const aiResult = await enhancedResp.json();
-          
+
           if (aiResult.success && aiResult.leads && aiResult.leads.length > 0) {
             console.log('✅ AI parser successful:', {
               totalRows: aiResult.totalRows,
@@ -3528,7 +3528,7 @@ export default function SalesAutomationUI() {
               processingTime: aiResult.processingTime,
               qualityMetrics: aiResult.qualityMetrics,
             });
-            
+
             // AI already returns properly formatted leads
             mapped = aiResult.leads.map((lead: Lead) => ({
               id: lead.id,
@@ -3544,61 +3544,69 @@ export default function SalesAutomationUI() {
               industry: lead.industry,
               status: lead.status || "new" as const,
             }));
-            
+
             console.log(`📊 Imported ${mapped.length} leads ready for email generation`);
-            
+
             // Immediately add leads to state for Lead Preview
             setLeads((prev) => {
               const newLeads = [...prev, ...mapped];
               console.log(`✅ Added ${mapped.length} leads to Lead Preview. Total: ${newLeads.length}`);
               return newLeads;
             });
-            
+
             // Show success message
             setImportError(null);
             console.log(`🎉 Success! ${mapped.length} leads now visible in Lead Preview table`);
-            
+
             // Show warnings if available
             if (aiResult.warnings && aiResult.warnings.length > 0) {
               console.warn('⚠️ Import warnings:', aiResult.warnings.slice(0, 5));
             }
-            
+
             if (aiResult.skippedRows > 0) {
               console.warn(`⚠️ Skipped ${aiResult.skippedRows} rows due to missing data`);
             }
-            
+
             // Early return - we're done!
             setImporting(false);
             return;
-          } else {
-            console.warn('❌ AI parser returned no leads, falling back...');
-            useEnhancedParser = false;
           }
-        } else {
-          console.warn('❌ AI parser unavailable, falling back...');
+
+          console.warn('❌ AI parser returned no leads, falling back...');
+          useEnhancedParser = false;
+        } catch (parseError) {
+          console.warn('❌ Failed to parse AI parser response, falling back...', parseError);
           useEnhancedParser = false;
         }
-      } catch (enhancedError) {
-        console.error('❌ AI parser error:', enhancedError);
+      } else {
+        if (enhancedResp) {
+          console.warn(`❌ AI parser unavailable (status ${enhancedResp.status}), falling back...`);
+        }
         useEnhancedParser = false;
       }
       
       // Fallback to original parser if enhanced parser fails
       if (!useEnhancedParser) {
         console.log('Using original CSV parser...');
-        const resp = await fetch("/api/map-csv", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
-        });
-
         let headerMapping: Record<string, string> | null = null;
         let rules: { splitFullName?: { column: string; firstNameFirst?: boolean } } | undefined = undefined;
 
-        if (resp.ok) {
-          const data = await resp.json();
-          headerMapping = data?.headerMapping ?? null;
-          rules = data?.rules;
+        try {
+          const resp = await fetch("/api/map-csv", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ columns, rows: rows.slice(0, 25) }),
+          });
+
+          if (resp.ok) {
+            const data = await resp.json();
+            headerMapping = data?.headerMapping ?? null;
+            rules = data?.rules;
+          } else {
+            console.warn(`/api/map-csv responded with ${resp.status}. Falling back to heuristic mapper.`);
+          }
+        } catch (mapError) {
+          console.warn('CSV mapping request failed, falling back to heuristics', mapError);
         }
 
         if (!headerMapping) {
@@ -3702,9 +3710,14 @@ export default function SalesAutomationUI() {
       // Show success message
       console.log(`✅ Successfully imported ${leadsToSet.length} leads!`);
     } catch (err) {
-      console.error("Import failed", err);
-      const message = err instanceof Error ? err.message : 'Failed to import CSV. Please try again.';
-      setImportError(message);
+      const friendlyMessage =
+        err instanceof TypeError && err.message === 'Failed to fetch'
+          ? 'We could not reach the CSV parsing service. Please check your network/API configuration or try again later.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to import CSV. Please try again.';
+      console.warn("Import failed", err);
+      setImportError(friendlyMessage);
     } finally {
       setImporting(false);
     }
