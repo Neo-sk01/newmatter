@@ -53,7 +53,6 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarSeparator,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { WorkspaceSwitcher } from "@/components/ui/workspace-switcher";
 import { WorkspaceProvider } from "@/lib/context/workspace-context";
@@ -95,6 +94,7 @@ import {
   ExternalLink,
   X,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -584,103 +584,164 @@ function AppSidebar({
   ];
 
   return (
-    <UiSidebar collapsible="icon" className="border-r bg-muted/40 backdrop-blur text-sm">
-      <SidebarHeader className="pb-4">
-        <div className="flex items-center gap-2 px-2">
-          <Logo className="h-12" priority />
+    <UiSidebar 
+      collapsible="icon" 
+      className="relative overflow-hidden border-r text-sm
+        /* Layered glass gradient to mirror top nav */
+        bg-gradient-to-br from-primary/18 via-background/92 to-background/70
+        dark:bg-gradient-to-br dark:from-primary/25 dark:via-background/55 dark:to-background/35
+        /* Dual shadows for lifted glass effect */
+        shadow-[inset_1px_0_0_rgba(255,255,255,0.45),_12px_0_32px_rgba(12,20,38,0.16),_4px_0_12px_rgba(12,20,38,0.12)]
+        dark:shadow-[inset_1px_0_0_rgba(255,255,255,0.1),_12px_0_32px_rgba(0,0,0,0.55),_4px_0_12px_rgba(0,0,0,0.35)]
+        /* Framed border to match nav shell */
+        border-r-primary/30 dark:border-r-primary/40
+        /* Ambient glow + base highlight overlays */
+        before:content-[''] before:absolute before:inset-x-3 before:bottom-0 before:h-32 before:-z-[1]
+        before:translate-y-20 before:rounded-full before:bg-gradient-to-b before:from-transparent before:via-black/12 before:to-black/25 before:opacity-70
+        dark:before:bg-gradient-to-b dark:before:via-black/35 dark:before:to-black/55
+        after:content-[''] after:absolute after:inset-0 after:-z-[2]
+        after:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.38),_rgba(255,255,255,0)_72%)] after:opacity-80
+        dark:after:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.16),_rgba(255,255,255,0)_75%)]"
+    >
+      <SidebarHeader className="relative px-2 pb-5">
+        <div className="relative flex items-center gap-3 overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/30 via-background/85 to-background/70 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_10px_26px_rgba(12,20,38,0.18),_0_4px_10px_rgba(12,20,38,0.15)] dark:border-primary/40 dark:bg-gradient-to-br dark:from-primary/35 dark:via-background/55 dark:to-background/35 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),_0_12px_32px_rgba(0,0,0,0.55),_0_4px_12px_rgba(0,0,0,0.35)]">
+          <div
+            className="pointer-events-none absolute inset-0 -z-[1] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.45),_rgba(255,255,255,0)_70%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.2),_rgba(255,255,255,0)_75%)]"
+            aria-hidden="true"
+          />
+          <Logo className="relative z-10 h-12 drop-shadow-[0_6px_10px_rgba(12,20,38,0.28)]" priority />
         </div>
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="space-y-4 px-2 pb-6">
         <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((it) => (
-                <SidebarMenuItem key={it.key}>
-              <SidebarMenuButton
-                type="button"
-                isActive={current === it.key}
-                className="text-sm"
-                onClick={() => onChange(it.key)}
-              >
-                    {it.icon}
-                    <span className="truncate">{it.label}</span>
+          <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-background/96 via-background/90 to-background/74 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),_0_8px_22px_rgba(12,20,38,0.16)] dark:border-primary/35 dark:bg-gradient-to-br dark:from-background/52 dark:via-background/45 dark:to-background/36 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_10px_26px_rgba(0,0,0,0.5)]">
+            <div
+              className="pointer-events-none absolute inset-0 -z-[1] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.3),_rgba(255,255,255,0)_80%)] opacity-90 dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.12),_rgba(255,255,255,0)_80%)]"
+              aria-hidden="true"
+            />
+            <SidebarGroupContent className="relative z-10 p-3">
+              <SidebarMenu className="flex flex-col gap-1">
+                {items.map((it) => (
+                  <SidebarMenuItem key={it.key}>
+                  <SidebarMenuButton
+                    type="button"
+                    isActive={current === it.key}
+                    className={cx(
+                      "text-sm transition-all duration-200 group relative overflow-hidden",
+                      current === it.key
+                        ? /* Active state - elevated with depth */
+                          "bg-gradient-to-r from-sidebar-accent via-sidebar-accent/90 to-sidebar-accent/80 "
+                          + "text-sidebar-accent-foreground font-medium "
+                          + "shadow-[inset_0_1px_0_rgba(255,255,255,0.2),_0_2px_8px_rgba(0,0,0,0.1),_0_1px_3px_rgba(0,0,0,0.15)] "
+                          + "dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_8px_rgba(0,0,0,0.3),_0_1px_3px_rgba(0,0,0,0.4)] "
+                          + "border border-sidebar-accent-foreground/10 "
+                          + "before:absolute before:inset-0 before:bg-gradient-to-b before:from-white/10 before:to-transparent"
+                        : /* Inactive state - subtle depth */
+                          "hover:bg-gradient-to-r hover:from-sidebar-accent/40 hover:via-sidebar-accent/30 hover:to-sidebar-accent/20 "
+                          + "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_4px_rgba(0,0,0,0.08)] "
+                          + "dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_4px_rgba(0,0,0,0.2)] "
+                          + "hover:text-sidebar-accent-foreground "
+                          + "hover:scale-[1.02] hover:translate-x-1"
+                    )}
+                    onClick={() => onChange(it.key)}
+                  >
+                    <div className={cx(
+                      "flex items-center gap-2 transition-transform duration-200",
+                      current === it.key ? "scale-105" : "group-hover:scale-105"
+                    )}>
+                      {it.icon}
+                      <span className="truncate">{it.label}</span>
+                    </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </div>
+        </SidebarGroup>
+
+        <SidebarSeparator className="mx-3 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-70" />
+
+        <SidebarGroup>
+          <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-background/95 via-background/88 to-background/74 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),_0_8px_20px_rgba(12,20,38,0.16)] dark:border-primary/35 dark:bg-gradient-to-br dark:from-background/52 dark:via-background/46 dark:to-background/36 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_10px_24px_rgba(0,0,0,0.48)]">
+            <div
+              className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-80 dark:via-white/20"
+              aria-hidden="true"
+            />
+            <SidebarGroupLabel className="relative z-20 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground/70 leading-tight">
+              <div className="flex min-w-0 flex-col gap-0.5 text-left">
+                <span>Lead Lists</span>
+                {loadingLeadLists && (
+                  <span className="text-[10px] lowercase tracking-wider text-foreground/60">syncing…</span>
+                )}
+              </div>
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="relative z-10 space-y-3 px-3 pb-3 pt-2">
+              <InlineActionCallout
+                message={
+                  lists.length === 0
+                    ? "No lists yet. Create one to get started."
+                    : "Add another lead list to segment prospects."
+                }
+                icon={FolderPlus}
+                label="Create list"
+                onClick={onNewList}
+                disabled={loadingLeadLists}
+              />
+              {lists.map((list) => (
+                <SidebarListRow
+                  key={list.id}
+                  list={list}
+                  active={currentListId === list.id}
+                  onSelect={() => onSelectList(list.id)}
+                  onRemove={() => onRemoveList(list.id)}
+                  onRename={(name) => onRenameList(list.id, name)}
+                />
               ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
+            </SidebarGroupContent>
+          </div>
         </SidebarGroup>
 
-        <SidebarSeparator />
-
         <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <span className="flex-1">
-              Lead Lists
-              {loadingLeadLists && <span className="ml-1 text-[10px] lowercase text-muted-foreground"> syncing…</span>}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-xl text-xs"
-              onClick={onNewList}
-              disabled={loadingLeadLists}
-            >
-              <FolderPlus className="mr-2 h-4 w-4" /> New
-            </Button>
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="space-y-2">
-            {lists.map((list) => (
-              <SidebarListRow
-                key={list.id}
-                list={list}
-                active={currentListId === list.id}
-                onSelect={() => onSelectList(list.id)}
-                onRemove={() => onRemoveList(list.id)}
-                onRename={(name) => onRenameList(list.id, name)}
+          <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-background/95 via-background/88 to-background/74 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),_0_8px_20px_rgba(12,20,38,0.16)] dark:border-primary/35 dark:bg-gradient-to-br dark:from-background/52 dark:via-background/46 dark:to-background/36 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_10px_24px_rgba(0,0,0,0.48)]">
+            <div
+              className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent opacity-80 dark:via-white/20"
+              aria-hidden="true"
+            />
+            <SidebarGroupLabel className="relative z-20 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground/70 leading-tight">
+              <div className="flex min-w-0 flex-col gap-0.5 text-left">
+                <span>Prompt Library</span>
+                {loadingPrompts && (
+                  <span className="text-[10px] lowercase tracking-wider text-foreground/60">loading…</span>
+                )}
+              </div>
+            </SidebarGroupLabel>
+            <SidebarGroupContent className="relative z-10 space-y-3 px-3 pb-3 pt-2">
+              <InlineActionCallout
+                message={
+                  prompts.length === 0
+                    ? "No prompts yet. Add one to get started."
+                    : "Create a new prompt to expand your library."
+                }
+                icon={Sparkles}
+                label="Create prompt"
+                onClick={onCreatePrompt}
+                disabled={loadingPrompts}
               />
-            ))}
-            {lists.length === 0 && (
-              <div className="px-1 text-xs text-muted-foreground">No lists. Create one to get started.</div>
-            )}
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarSeparator />
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <span className="flex-1">
-              Prompt Library
-              {loadingPrompts && <span className="ml-1 text-[10px] lowercase text-muted-foreground"> loading…</span>}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-xl text-xs"
-              onClick={onCreatePrompt}
-              disabled={loadingPrompts}
-            >
-              <Sparkles className="mr-2 h-4 w-4" /> New
-            </Button>
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="space-y-2">
-            {prompts.map((prompt) => (
-              <SidebarPromptRow
-                key={prompt.id}
-                prompt={prompt}
-                active={activePromptId === prompt.id}
-                onSelect={() => onSelectPrompt(prompt.id)}
-                onRename={(name) => onRenamePrompt(prompt.id, name)}
-                onDelete={() => onDeletePrompt(prompt.id)}
-                onDuplicate={() => onDuplicatePrompt(prompt.id)}
-                disableDelete={prompts.length <= 1}
-              />
-            ))}
-            {prompts.length === 0 && (
-              <div className="px-1 text-xs text-muted-foreground">No prompts yet. Add one to get started.</div>
-            )}
-          </SidebarGroupContent>
+              {prompts.map((prompt) => (
+                <SidebarPromptRow
+                  key={prompt.id}
+                  prompt={prompt}
+                  active={activePromptId === prompt.id}
+                  onSelect={() => onSelectPrompt(prompt.id)}
+                  onRename={(name) => onRenamePrompt(prompt.id, name)}
+                  onDelete={() => onDeletePrompt(prompt.id)}
+                  onDuplicate={() => onDuplicatePrompt(prompt.id)}
+                  disableDelete={prompts.length <= 1}
+                />
+              ))}
+            </SidebarGroupContent>
+          </div>
         </SidebarGroup>
 
         {activePrompt && (
@@ -770,12 +831,88 @@ function AppSidebar({
           </SidebarGroup>
         )}
       </SidebarContent>
-      <SidebarFooter className="pt-4">
-        <div className="px-2 text-[11px] text-muted-foreground">
-          v1.0 · Shadcn UI · Tailwind
+      <SidebarFooter className="relative px-2 pb-4 pt-2">
+        <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-background/90 via-background/82 to-background/70 px-3 py-2 text-[11px] text-foreground/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.4),_0_4px_12px_rgba(12,20,38,0.12)] dark:border-primary/35 dark:bg-gradient-to-br dark:from-background/50 dark:via-background/44 dark:to-background/34 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),_0_4px_12px_rgba(0,0,0,0.35)]">
+          <div
+            className="pointer-events-none absolute inset-0 -z-[1] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.28),_rgba(255,255,255,0)_78%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.12),_rgba(255,255,255,0)_78%)]"
+            aria-hidden="true"
+          />
+          <span className="relative z-10">v1.0 · Shadcn UI · Tailwind</span>
         </div>
       </SidebarFooter>
     </UiSidebar>
+  );
+}
+
+function HeaderActionButton({
+  icon: Icon,
+  label,
+  onClick,
+  disabled,
+  className,
+  tooltipSide = "left",
+}: {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  tooltipSide?: "left" | "right" | "top" | "bottom";
+}) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cx(
+              "relative h-9 w-9 shrink-0 rounded-full border border-primary/30 bg-background/95 text-primary shadow-[0_2px_6px_rgba(12,20,38,0.1)] transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.05] hover:shadow-[0_8px_18px_rgba(12,20,38,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60 disabled:shadow-none dark:border-primary/40 dark:bg-background/60 dark:text-primary-foreground",
+              className
+            )}
+            aria-label={label}
+            title={label}
+            onClick={onClick}
+            disabled={disabled}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{label}</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side={tooltipSide} className="text-xs">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+function InlineActionCallout({
+  message,
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  message: string;
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/20 bg-background/60 px-3 py-2 text-xs text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.35),_0_1px_2px_rgba(12,20,38,0.06)] dark:border-primary/25 dark:bg-background/45 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),_0_1px_2px_rgba(0,0,0,0.25)]">
+      <span className="flex-1 leading-relaxed">{message}</span>
+      <HeaderActionButton
+        icon={icon}
+        label={label}
+        onClick={onClick}
+        disabled={disabled}
+        tooltipSide="top"
+        className="h-8 w-8 rounded-xl border-none bg-primary/20 text-primary shadow-none hover:bg-primary/30 dark:bg-primary/30 dark:text-primary-foreground"
+      />
+    </div>
   );
 }
 
@@ -807,26 +944,45 @@ function SidebarListRow({
   };
 
   return (
-    <div className="flex items-center gap-2 px-1">
+    <div className="flex items-center gap-2 px-2 py-1.5">
       {!editing ? (
         <>
           <Button
             variant={active ? "secondary" : "ghost"}
             size="sm"
             className={cx(
-              "flex-1 justify-start gap-2 rounded-xl text-sm min-w-0",
-              active && "shadow"
+              "flex-1 justify-start gap-2 rounded-xl text-sm min-w-0 transition-all duration-200 group relative overflow-hidden",
+              active 
+                ? /* Active list - elevated appearance */
+                  "bg-gradient-to-r from-sidebar-accent via-sidebar-accent/90 to-sidebar-accent/80 "
+                  + "text-sidebar-accent-foreground font-medium "
+                  + "shadow-[inset_0_1px_0_rgba(255,255,255,0.2),_0_2px_6px_rgba(0,0,0,0.1),_0_1px_2px_rgba(0,0,0,0.1)] "
+                  + "dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_6px_rgba(0,0,0,0.25),_0_1px_2px_rgba(0,0,0,0.3)] "
+                  + "border border-sidebar-accent-foreground/10"
+                : /* Inactive list - subtle hover */
+                  "hover:bg-gradient-to-r hover:from-sidebar-accent/30 hover:to-sidebar-accent/15 "
+                  + "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.08)] "
+                  + "dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.15)] "
+                  + "hover:text-sidebar-accent-foreground hover:scale-[1.01]"
             )}
             onClick={onSelect}
           >
-            <Folder className="h-5 w-5 flex-shrink-0" />
+            <Folder className={cx(
+              "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+              active ? "scale-110" : "group-hover:scale-105"
+            )} />
             <span className="truncate">{list.name}</span>
           </Button>
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1 flex-shrink-0 pl-1">
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-7 w-7"
+              className="rounded-xl h-7 w-7 transition-all duration-200
+                /* Subtle action button */
+                hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.1)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.2)]
+                hover:scale-110 active:scale-95"
               aria-label="Rename list"
               onClick={() => setEditing(true)}
             >
@@ -835,7 +991,12 @@ function SidebarListRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-7 w-7"
+              className="rounded-xl h-7 w-7 transition-all duration-200
+                /* Destructive action button */
+                hover:bg-destructive/20 hover:text-destructive
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.1)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.2)]
+                hover:scale-110 active:scale-95"
               aria-label="Delete list"
               onClick={onRemove}
             >
@@ -925,17 +1086,39 @@ function SidebarPromptRow({
           <Button
             variant={active ? "secondary" : "ghost"}
             size="sm"
-            className={cx("flex-1 justify-start gap-2 rounded-xl text-sm min-w-0", active && "shadow")}
+            className={cx(
+              "flex-1 justify-start gap-2 rounded-xl text-sm min-w-0 transition-all duration-200 group relative overflow-hidden",
+              active 
+                ? /* Active prompt - elevated appearance */
+                  "bg-gradient-to-r from-sidebar-accent via-sidebar-accent/90 to-sidebar-accent/80 "
+                  + "text-sidebar-accent-foreground font-medium "
+                  + "shadow-[inset_0_1px_0_rgba(255,255,255,0.2),_0_2px_6px_rgba(0,0,0,0.1),_0_1px_2px_rgba(0,0,0,0.1)] "
+                  + "dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_6px_rgba(0,0,0,0.25),_0_1px_2px_rgba(0,0,0,0.3)] "
+                  + "border border-sidebar-accent-foreground/10"
+                : /* Inactive prompt - subtle hover */
+                  "hover:bg-gradient-to-r hover:from-sidebar-accent/30 hover:to-sidebar-accent/15 "
+                  + "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.08)] "
+                  + "dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.15)] "
+                  + "hover:text-sidebar-accent-foreground hover:scale-[1.01]"
+            )}
             onClick={onSelect}
           >
-            <AlignLeft className="h-5 w-5 flex-shrink-0" />
+            <AlignLeft className={cx(
+              "h-5 w-5 flex-shrink-0 transition-transform duration-200",
+              active ? "scale-110" : "group-hover:scale-105"
+            )} />
             <span className="truncate">{prompt.name}</span>
           </Button>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-7 w-7"
+              className="rounded-xl h-7 w-7 transition-all duration-200
+                /* Subtle action button */
+                hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.1)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.2)]
+                hover:scale-110 active:scale-95"
               aria-label="Duplicate prompt"
               onClick={onDuplicate}
             >
@@ -944,7 +1127,12 @@ function SidebarPromptRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-7 w-7"
+              className="rounded-xl h-7 w-7 transition-all duration-200
+                /* Subtle action button */
+                hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.1)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.2)]
+                hover:scale-110 active:scale-95"
               aria-label="Rename prompt"
               onClick={() => setEditing(true)}
             >
@@ -953,7 +1141,13 @@ function SidebarPromptRow({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-xl h-7 w-7"
+              className="rounded-xl h-7 w-7 transition-all duration-200
+                /* Destructive action button */
+                hover:bg-destructive/20 hover:text-destructive
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.1)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.2)]
+                hover:scale-110 active:scale-95
+                disabled:opacity-50 disabled:hover:scale-100 disabled:hover:bg-transparent"
               aria-label="Delete prompt"
               onClick={onDelete}
               disabled={disableDelete}
@@ -1001,77 +1195,99 @@ function SidebarPromptRow({
 }
 
 function Topbar() {
+  const [hidden, setHidden] = useState(false);
+  const lastScrollY = useRef(0);
+  const hiddenRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    lastScrollY.current = window.scrollY;
+
+    const handleScroll = () => {
+      const current = window.scrollY;
+      const diff = current - lastScrollY.current;
+
+      if (Math.abs(diff) < 6) {
+        lastScrollY.current = current;
+        return;
+      }
+
+      if (current <= 80 && hiddenRef.current) {
+        hiddenRef.current = false;
+        setHidden(false);
+      } else if (current > 80) {
+        if (diff > 0 && !hiddenRef.current) {
+          hiddenRef.current = true;
+          setHidden(true);
+        } else if (diff < 0 && hiddenRef.current) {
+          hiddenRef.current = false;
+          setHidden(false);
+        }
+      }
+
+      lastScrollY.current = current;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
-    <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b bg-muted/50 backdrop-blur px-4 py-2">
-      <div className="flex items-center gap-2">
-        <SidebarTrigger className="md:hidden rounded-xl" />
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-xl">
-                <Search className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Search</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <div className="text-sm text-muted-foreground hidden sm:block">
-          AI-Driven Sales Automation Tool
+    <nav
+      className={cx(
+        "sticky top-0 z-40 px-4 md:px-6 py-3 transition-transform transition-opacity duration-300 ease-out will-change-transform",
+        hidden ? "-translate-y-full opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+      )}
+      aria-label="Primary navigation"
+    >
+      <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/18 via-background/92 to-background/70 px-4 py-2.5 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_12px_28px_rgba(12,20,38,0.18),_0_4px_10px_rgba(12,20,38,0.15)] md:flex-nowrap dark:border-primary/35 dark:bg-gradient-to-br dark:from-primary/25 dark:via-background/55 dark:to-background/35 dark:text-foreground dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_14px_32px_rgba(0,0,0,0.55),_0_4px_12px_rgba(0,0,0,0.35)]">
+        <div
+          className="pointer-events-none absolute inset-0 -z-[1] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.42),_rgba(255,255,255,0)_65%)] dark:bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.18),_rgba(255,255,255,0)_72%)]"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute inset-x-4 bottom-0 h-16 translate-y-8 rounded-full bg-gradient-to-b from-transparent via-black/10 to-black/20 dark:via-black/25 dark:to-black/40"
+          aria-hidden="true"
+        />
+        <div className="flex items-center gap-3 min-w-0">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-xl bg-gradient-to-b from-primary/20 via-primary/10 to-background/55 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_4px_12px_rgba(12,20,38,0.18)] transition-all duration-200 hover:scale-[1.05] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_7px_16px_rgba(12,20,38,0.26)] dark:bg-gradient-to-b dark:from-primary/30 dark:via-background/55 dark:to-background/35 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_4px_12px_rgba(0,0,0,0.5)]"
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Search</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="hidden lg:flex min-w-[14rem] flex-col space-y-0.5">
+            <span className="text-sm font-semibold text-foreground/90">
+              AI Sales Control Center
+            </span>
+            <span className="text-xs text-muted-foreground/75">
+              Monitor, enrich &amp; launch sequences
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 flex-wrap">
+          <div className="flex items-center gap-2 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/18 via-background/90 to-background/70 px-2.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_5px_14px_rgba(12,20,38,0.16)] dark:border-primary/40 dark:bg-gradient-to-r dark:from-primary/28 dark:via-background/55 dark:to-background/38 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_6px_18px_rgba(0,0,0,0.5)]">
+            <HydrationSafeThemeToggle className="bg-gradient-to-b from-background/90 via-background/80 to-background/60 border-primary/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_4px_12px_rgba(12,20,38,0.2)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),_0_6px_16px_rgba(12,20,38,0.28)]" />
+          </div>
+          <div className="flex items-stretch rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/20 via-background/88 to-background/70 px-1.5 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_5px_14px_rgba(12,20,38,0.18)] dark:border-primary/40 dark:bg-gradient-to-br dark:from-primary/28 dark:via-background/55 dark:to-background/38 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_6px_18px_rgba(0,0,0,0.5)]">
+            <WorkspaceSwitcher className="w-full justify-start bg-gradient-to-r from-primary/22 via-primary/15 to-background/60 px-3 py-2 text-left text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.55),_0_4px_12px_rgba(12,20,38,0.2)] transition-all duration-200 hover:scale-[1.02] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.72),_0_7px_18px_rgba(12,20,38,0.28)]" />
+          </div>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <HydrationSafeThemeToggle className="rounded-xl" />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="rounded-xl">
-              <Filter className="mr-2 h-4 w-4" /> Filters
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl">
-            <DropdownMenuItem className="gap-2"><Checkbox /> New</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2"><Checkbox /> Enriched</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2"><Checkbox /> Generated</DropdownMenuItem>
-            <DropdownMenuItem className="gap-2"><Checkbox /> Approved</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <WorkspaceSwitcher />
-      </div>
-    </div>
+    </nav>
   );
 }
 
-function Stepper({ step, onStep }: { step: number; onStep: (n: number) => void }) {
-  const steps = [
-    { key: "Import", icon: <CloudUpload className="h-4 w-4" /> },
-    { key: "Enrich", icon: <Database className="h-4 w-4" /> },
-    { key: "Generate", icon: <BrainCircuit className="h-4 w-4" /> },
-    { key: "Review", icon: <FileText className="h-4 w-4" /> },
-    { key: "Send", icon: <Mail className="h-4 w-4" /> },
-    { key: "Analytics", icon: <LineChart className="h-4 w-4" /> },
-  ];
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-lime-600 bg-lime-500 p-2 text-white">
-      {steps.map((s, i) => (
-        <Button
-          key={s.key}
-          variant="ghost"
-          size="sm"
-          className={cx(
-            "rounded-xl px-3 text-white border",
-            i === step
-              ? "bg-black border-black hover:bg-black"
-              : "bg-white/10 border-white/40 hover:bg-white/20"
-          )}
-          onClick={() => onStep(i)}
-        >
-          <span className="mr-2">{s.icon}</span>
-          <span className="hidden sm:inline">{i + 1}. {s.key}</span>
-          <span className="sm:hidden">{i + 1}</span>
-        </Button>
-      ))}
-    </div>
-  );
-}
 
 // ----------------------------------------------
 // Main screens
@@ -1115,19 +1331,58 @@ function ImportScreen({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-4 xl:grid-cols-6">
-      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6">
-        <CardHeader>
-          <CardTitle>Upload CSV</CardTitle>
-          <CardDescription>Import leads from spreadsheets. Column mapping is automatic with manual override.</CardDescription>
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-4 xl:grid-cols-6 relative
+      /* Enhanced grid container with depth */
+      p-1 rounded-2xl
+      bg-gradient-to-br from-background via-background/95 to-muted/30
+      /* Light direction - subtle top highlight */
+      before:absolute before:inset-x-0 before:top-0 before:h-px 
+      before:bg-gradient-to-r before:from-transparent before:via-foreground/5 before:to-transparent
+      /* Subtle container depth */
+      shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.05)]
+      dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.02),_0_1px_3px_rgba(0,0,0,0.1)]">
+      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 relative overflow-hidden
+        /* Enhanced card with layered depth */
+        bg-gradient-to-b from-card via-card/98 to-card/95
+        /* Light direction effects */
+        shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_4px_12px_rgba(0,0,0,0.08),_0_2px_4px_rgba(0,0,0,0.06)]
+        dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_4px_12px_rgba(0,0,0,0.2),_0_2px_4px_rgba(0,0,0,0.15)]
+        /* Enhanced border with depth */
+        border-2 border-border/50
+        hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.15),_0_6px_16px_rgba(0,0,0,0.1),_0_3px_6px_rgba(0,0,0,0.08)]
+        dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),_0_6px_16px_rgba(0,0,0,0.25),_0_3px_6px_rgba(0,0,0,0.2)]
+        transition-all duration-300">
+        <CardHeader className="relative pb-6
+          /* Enhanced header with subtle depth */
+          bg-gradient-to-b from-card-foreground/2 to-transparent
+          border-b border-border/30
+          shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_1px_3px_rgba(0,0,0,0.05)]
+          dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_1px_3px_rgba(0,0,0,0.1)]">
+          <CardTitle className="text-xl font-bold bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">Upload CSV</CardTitle>
+          <CardDescription className="text-muted-foreground/90">Import leads from spreadsheets. Column mapping is automatic with manual override.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div
             className={cx(
-              "rounded-2xl border-2 border-dashed p-6 text-center cursor-pointer transition-colors",
-              "bg-muted/20 hover:bg-muted/30",
-              dragActive && "border-ring bg-accent/40",
-              isImporting && "pointer-events-none opacity-60"
+              "rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer transition-all duration-300 relative overflow-hidden group",
+              /* Base state - layered depth */
+              "bg-gradient-to-b from-muted/30 via-muted/20 to-muted/10",
+              "shadow-[inset_0_2px_4px_rgba(0,0,0,0.06),_0_2px_8px_rgba(0,0,0,0.04)]",
+              "dark:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15),_0_2px_8px_rgba(0,0,0,0.1)]",
+              "border-border/40",
+              /* Hover state - elevated */
+              "hover:bg-gradient-to-b hover:from-muted/40 hover:via-muted/30 hover:to-muted/20",
+              "hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_4px_12px_rgba(0,0,0,0.08),_0_2px_6px_rgba(0,0,0,0.06)]",
+              "dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_4px_12px_rgba(0,0,0,0.2),_0_2px_6px_rgba(0,0,0,0.15)]",
+              "hover:border-border/60 hover:scale-[1.01]",
+              /* Light direction highlight */
+              "before:absolute before:inset-x-0 before:top-0 before:h-px",
+              "before:bg-gradient-to-r before:from-transparent before:via-foreground/10 before:to-transparent",
+              "before:opacity-0 hover:before:opacity-100 before:transition-opacity before:duration-300",
+              /* Active drag state */
+              dragActive && "border-ring bg-gradient-to-b from-accent/50 to-accent/30 scale-[1.02] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),_0_6px_20px_rgba(0,0,0,0.12)]",
+              /* Importing state */
+              isImporting && "pointer-events-none opacity-60 scale-[0.98]"
             )}
             onDragOver={handleDragOver}
             onDragEnter={handleDragOver}
@@ -1138,10 +1393,15 @@ function ImportScreen({
             aria-label="Drop CSV file here or click to browse"
             aria-busy={isImporting}
           >
-            <div className="flex flex-col items-center gap-2">
-              <Upload className="h-6 w-6 text-muted-foreground" />
-              <div className="font-medium">Drag & drop CSV here</div>
-              <div className="text-xs text-muted-foreground">or click to browse · .csv only</div>
+            <div className="flex flex-col items-center gap-3 relative z-10">
+              <div className="p-3 rounded-full bg-gradient-to-b from-muted-foreground/10 to-muted-foreground/5
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_4px_rgba(0,0,0,0.1)]
+                dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_2px_4px_rgba(0,0,0,0.2)]
+                group-hover:scale-110 transition-transform duration-300">
+                <Upload className="h-6 w-6 text-muted-foreground group-hover:text-foreground transition-colors duration-300" />
+              </div>
+              <div className="font-semibold text-lg bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">Drag & drop CSV here</div>
+              <div className="text-sm text-muted-foreground/80 font-medium">or click to browse · .csv only</div>
               {isImporting && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" /> Processing file…
@@ -1154,7 +1414,15 @@ function ImportScreen({
               ref={fileRef}
               type="file"
               accept=".csv"
-              className="rounded-xl"
+              className="rounded-xl transition-all duration-200
+                /* Enhanced input with depth */
+                bg-gradient-to-b from-input to-input/95
+                shadow-[inset_0_2px_4px_rgba(0,0,0,0.06),_0_1px_3px_rgba(0,0,0,0.04)]
+                dark:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15),_0_1px_3px_rgba(0,0,0,0.1)]
+                border-2 border-border/50
+                focus:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_0_0_2px_rgba(var(--ring),0.2),_0_2px_8px_rgba(0,0,0,0.08)]
+                dark:focus:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_0_0_2px_rgba(var(--ring),0.3),_0_2px_8px_rgba(0,0,0,0.2)]
+                hover:border-border/70 focus:border-ring/50"
               onChange={(e) => {
                 const f = e.currentTarget.files?.[0];
                 if (f) void onImportCSV(f);
@@ -1162,7 +1430,17 @@ function ImportScreen({
               disabled={isImporting}
             />
             <Button
-              className="rounded-xl"
+              className="rounded-xl transition-all duration-200
+                /* Enhanced button with depth */
+                bg-gradient-to-b from-primary via-primary/95 to-primary/90
+                text-primary-foreground font-semibold
+                shadow-[inset_0_1px_0_rgba(255,255,255,0.2),_0_2px_8px_rgba(0,0,0,0.15),_0_1px_3px_rgba(0,0,0,0.2)]
+                dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_8px_rgba(0,0,0,0.3),_0_1px_3px_rgba(0,0,0,0.4)]
+                border border-primary/20
+                hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.3),_0_4px_12px_rgba(0,0,0,0.2),_0_2px_6px_rgba(0,0,0,0.25)]
+                dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.15),_0_4px_12px_rgba(0,0,0,0.4),_0_2px_6px_rgba(0,0,0,0.5)]
+                hover:scale-105 active:scale-95
+                disabled:opacity-60 disabled:hover:scale-100"
               onClick={() => {
                 const f = fileRef.current?.files?.[0];
                 if (f) void onImportCSV(f);
@@ -1181,7 +1459,16 @@ function ImportScreen({
             </Button>
           </div>
           {importError && (
-            <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            <div className="rounded-xl px-4 py-3 text-sm relative overflow-hidden
+              /* Enhanced error styling with depth */
+              bg-gradient-to-b from-destructive/15 via-destructive/10 to-destructive/5
+              text-destructive font-medium
+              border-2 border-destructive/30
+              shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_2px_6px_rgba(0,0,0,0.1)]
+              dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_2px_6px_rgba(0,0,0,0.2)]
+              /* Light direction highlight */
+              before:absolute before:inset-x-0 before:top-0 before:h-px
+              before:bg-gradient-to-r before:from-transparent before:via-destructive/20 before:to-transparent">
               {importError}
             </div>
           )}
@@ -1191,7 +1478,17 @@ function ImportScreen({
 
       {/* Removed: Connect CRM container as requested */}
 
-      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1">
+      <Card className="rounded-2xl lg:col-span-4 xl:col-span-6 lg:col-start-1 xl:col-start-1 relative overflow-hidden
+        /* Enhanced card with layered depth */
+        bg-gradient-to-b from-card via-card/98 to-card/95
+        /* Light direction effects */
+        shadow-[inset_0_1px_0_rgba(255,255,255,0.1),_0_4px_12px_rgba(0,0,0,0.08),_0_2px_4px_rgba(0,0,0,0.06)]
+        dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),_0_4px_12px_rgba(0,0,0,0.2),_0_2px_4px_rgba(0,0,0,0.15)]
+        /* Enhanced border with depth */
+        border-2 border-border/50
+        hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.15),_0_6px_16px_rgba(0,0,0,0.1),_0_3px_6px_rgba(0,0,0,0.08)]
+        dark:hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),_0_6px_16px_rgba(0,0,0,0.25),_0_3px_6px_rgba(0,0,0,0.2)]
+        transition-all duration-300">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Lead Preview</CardTitle>
@@ -3703,8 +4000,6 @@ export default function SalesAutomationUI() {
         <SidebarInset className="bg-gradient-to-b from-background to-muted/30 flex min-h-svh flex-col">
           <Topbar />
           <main className="flex-1 overflow-auto px-6 py-6 space-y-6 md:px-8">
-            {section !== 'preview' && <Stepper step={step} onStep={setStep} />}
-
             {section === "import" && (
               <ImportScreen
                 leads={leads}
