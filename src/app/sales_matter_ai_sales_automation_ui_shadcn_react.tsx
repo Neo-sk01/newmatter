@@ -586,7 +586,7 @@ function AppSidebar({
   return (
     <UiSidebar 
       collapsible="icon" 
-      className="relative overflow-hidden border-r text-sm
+      className="overflow-hidden border-r text-sm min-h-svh
         /* Layered glass gradient to mirror top nav */
         bg-gradient-to-br from-primary/18 via-background/92 to-background/70
         dark:bg-gradient-to-br dark:from-primary/25 dark:via-background/55 dark:to-background/35
