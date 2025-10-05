@@ -1,9 +1,9 @@
-import { generateText } from "ai";
+import { streamText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 
 function resolveModel(identifier: unknown) {
-  const fallbackIdentifier = process.env.AI_EMAIL_MODEL ?? "openai:gpt-4o-mini";
+  const fallbackIdentifier = process.env.AI_EMAIL_MODEL ?? "openai:gpt-5-mini-2025-08-07";
   const value = typeof identifier === "string" && identifier.trim().length > 0 ? identifier.trim() : fallbackIdentifier;
   const [provider, ...rest] = value.split(":");
   const modelName = rest.join(":").trim();
@@ -46,23 +46,17 @@ export async function POST(req: Request) {
       ? `${prompt.trim()}\n\nApproved research summary (max 100 words):\n${researchSummary}\n\nPersonalize the outreach by referencing at least one insight from the summary. Do not repeat the summary verbatim.`
       : prompt;
 
-    const result = await generateText({
+    const result = streamText({
       model,
       system,
       prompt: compiledPrompt,
       maxOutputTokens: 700,
-      temperature: 0.7,
     });
 
-    const textResponse = result.text?.trim() ?? "";
-
-    return new Response(textResponse, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    });
+    return result.toTextStreamResponse();
   } catch (e) {
-    return new Response("Failed to generate", { status: 500 });
+    console.error("Generate email error:", e);
+    const errorMessage = e instanceof Error ? e.message : "Failed to generate";
+    return new Response(errorMessage, { status: 500 });
   }
 }

@@ -113,11 +113,31 @@ export default function Gpt5ColdOutreachTestPage() {
         throw new Error(message || response.statusText);
       }
 
-      const raw = (await response.text()).trim();
+      // Handle streaming text response
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      let raw = "";
+      const decoder = new TextDecoder();
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          raw += chunk;
+        }
+      } finally {
+        reader.releaseLock();
+      }
 
       let nextSubject = "";
       let nextBody = "";
 
+      // First try to parse as JSON
       try {
         const jsonMatch = raw.match(/\{[\s\S]*}/);
         if (jsonMatch) {
@@ -129,22 +149,35 @@ export default function Gpt5ColdOutreachTestPage() {
         console.warn("Failed to parse AI response as JSON", parseError);
       }
 
-      if (!nextSubject) {
+      // If no JSON found, try to extract subject and body from plain text
+      if (!nextSubject && !nextBody) {
+        // Look for "Subject:" pattern
         const subjectMatch = raw.match(/subject[:\-\s]+(.+)/i);
         if (subjectMatch) {
           nextSubject = subjectMatch[1].trim();
+          // Remove the subject line from raw to get the body
+          const subjectEndIndex = raw.indexOf('\n', raw.indexOf(subjectMatch[0]));
+          if (subjectEndIndex > -1) {
+            nextBody = raw.slice(subjectEndIndex + 1).trim();
+          }
+        } else {
+          // If no subject pattern found, treat the whole response as body
+          // and try to extract a subject from the first line if it looks like one
+          const lines = raw.split('\n');
+          const firstLine = lines[0]?.trim();
+          if (firstLine && firstLine.length < 100 && !firstLine.includes('.') && !firstLine.startsWith('Hi')) {
+            nextSubject = firstLine;
+            nextBody = lines.slice(1).join('\n').trim();
+          } else {
+            nextSubject = baseSubject; // fallback to base subject
+            nextBody = raw.trim();
+          }
         }
       }
 
-      if (!nextBody) {
-        const lower = raw.toLowerCase();
-        const bodyIndex = lower.indexOf("body:");
-        if (bodyIndex >= 0) {
-          nextBody = raw.slice(bodyIndex + 5).trim();
-        } else {
-          nextBody = raw;
-        }
-      }
+      // Fallback if still no content
+      if (!nextSubject) nextSubject = baseSubject;
+      if (!nextBody) nextBody = baseBody;
 
       setResult({ subject: nextSubject || baseSubject, body: nextBody || baseBody, raw });
     } catch (err) {
