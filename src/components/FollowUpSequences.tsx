@@ -280,11 +280,11 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
           {/* Create Sequence Form */}
           {showCreateForm && (
             <Card className="border-2 border-primary">
-              <CardHeader>
+              <CardHeader className="pb-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Create New Follow-up Sequence</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-xl">Create New Follow-up Sequence</CardTitle>
+                    <CardDescription className="mt-1.5">
                       Define a multi-step follow-up sequence for your leads
                     </CardDescription>
                   </div>
@@ -297,31 +297,33 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-6">
                 <ScrollArea className="max-h-[70vh] pr-4">
-                  <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="name">Sequence Name</Label>
+                  <div className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="name" className="text-sm font-medium">Sequence Name</Label>
                         <Input
                           id="name"
                           value={newSequenceName}
                           onChange={(e) => setNewSequenceName(e.target.value)}
                           placeholder="e.g., Cold Outreach Sequence"
+                          className="h-10"
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="description">Description</Label>
+                      <div className="space-y-2">
+                        <Label htmlFor="description" className="text-sm font-medium">Description</Label>
                         <Textarea
                           id="description"
                           value={newSequenceDescription}
                           onChange={(e) => setNewSequenceDescription(e.target.value)}
                           placeholder="Brief description of this sequence"
+                          className="min-h-[80px]"
                         />
                       </div>
 
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <Label>Follow-up Steps</Label>
+                      <div className="space-y-5 pt-2">
+                        <div className="flex items-center justify-between pb-2">
+                          <Label className="text-sm font-medium">Follow-up Steps</Label>
                           <Button
                             type="button"
                             variant="outline"
@@ -334,10 +336,10 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                         </div>
 
                         {newSequenceSteps.map((step, index) => (
-                          <Card key={index} className="p-4">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <h4 className="font-semibold">Step {index + 1}</h4>
+                          <Card key={index} className="p-5 border-2">
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between mb-1">
+                                <h4 className="font-semibold text-base">Step {index + 1}</h4>
                                 {newSequenceSteps.length > 1 && (
                                   <Button
                                     type="button"
@@ -350,9 +352,9 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                                 )}
                               </div>
 
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <Label>Delay (Days)</Label>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">Delay (Days)</Label>
                                   <Input
                                     type="number"
                                     min="0"
@@ -362,10 +364,11 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                                       newSteps[index].delayDays = parseInt(e.target.value) || 0;
                                       setNewSequenceSteps(newSteps);
                                     }}
+                                    className="h-10"
                                   />
                                 </div>
-                                <div>
-                                  <Label>Delay (Hours)</Label>
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium">Delay (Hours)</Label>
                                   <Input
                                     type="number"
                                     min="0"
@@ -376,12 +379,13 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                                       newSteps[index].delayHours = parseInt(e.target.value) || 0;
                                       setNewSequenceSteps(newSteps);
                                     }}
+                                    className="h-10"
                                   />
                                 </div>
                               </div>
 
-                              <div>
-                                <Label>Subject Template</Label>
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Subject Template</Label>
                                 <Input
                                   value={step.subjectTemplate}
                                   onChange={(e) => {
@@ -390,11 +394,12 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                                     setNewSequenceSteps(newSteps);
                                   }}
                                   placeholder="Use {{firstName}}, {{company}}, etc."
+                                  className="h-10"
                                 />
                               </div>
 
-                              <div>
-                                <Label>Body Template</Label>
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Body Template</Label>
                                 <Textarea
                                   value={step.bodyTemplate}
                                   onChange={(e) => {
@@ -404,6 +409,7 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                                   }}
                                   placeholder="Email body with {{firstName}}, {{company}}, etc."
                                   rows={4}
+                                  className="min-h-[100px]"
                                 />
                               </div>
                             </div>
@@ -412,11 +418,11 @@ export function FollowUpSequences({ companyId, leadId }: FollowUpSequencesProps)
                       </div>
                     </div>
                   </ScrollArea>
-                  <div className="flex gap-2 mt-4 pt-4 border-t">
-                    <Button variant="outline" onClick={() => setShowCreateForm(false)}>
+                  <div className="flex gap-3 mt-6 pt-5 border-t">
+                    <Button variant="outline" onClick={() => setShowCreateForm(false)} className="h-10">
                       Cancel
                     </Button>
-                    <Button onClick={createSequence}>Create Sequence</Button>
+                    <Button onClick={createSequence} className="h-10">Create Sequence</Button>
                   </div>
                 </CardContent>
               </Card>
