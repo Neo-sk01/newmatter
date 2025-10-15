@@ -62,6 +62,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import FooterSection from "@/components/footer-section";
 import { HydrationSafeThemeToggle } from "@/components/HydrationSafeThemeToggle";
+import { FollowUpSequences } from "@/components/FollowUpSequences";
 import { format } from "date-fns";
 import {
   AlignLeft,
@@ -94,6 +95,7 @@ import {
   Folder,
   ExternalLink,
   X,
+  Repeat,
 } from "lucide-react";
 import {
   Area,
@@ -579,6 +581,7 @@ function AppSidebar({
     { key: "preview", label: "Preview", icon: <Search className="h-5 w-5" /> },
     { key: "review", label: "Review", icon: <FileText className="h-5 w-5" /> },
     { key: "send", label: "Send", icon: <Mail className="h-5 w-5" /> },
+    { key: "sequences", label: "Follow-up Sequences", icon: <Repeat className="h-5 w-5" /> },
     { key: "analytics", label: "Analytics", icon: <LineChart className="h-5 w-5" /> },
     { key: "settings", label: "Settings", icon: <Settings className="h-5 w-5" /> },
   ];
@@ -3775,6 +3778,12 @@ export default function SalesAutomationUI() {
                 setBatchSize={setBatchSize}
                 schedule={schedule}
                 setSchedule={setSchedule}
+              />
+            )}
+
+            {section === "sequences" && (
+              <FollowUpSequences 
+                companyId="00000000-0000-0000-0000-000000000001"
               />
             )}
 

@@ -16,6 +16,7 @@ import {
   Edit,
 } from 'lucide-react';
 import { UserMetadata, Permission } from '@/lib/types/auth';
+import { FollowUpSequences } from '@/components/FollowUpSequences';
 
 interface CompanyDashboardProps {
   companyId: string;
@@ -133,10 +134,11 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
 
         {/* Main Dashboard Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="leads">Leads</TabsTrigger>
             <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
+            <TabsTrigger value="sequences">Follow-up Sequences</TabsTrigger>
             <TabsTrigger value="prompts">Prompts</TabsTrigger>
             {hasPermission(Permission.MANAGE_SETTINGS) && (
               <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -276,6 +278,10 @@ export function CompanyDashboard({ companyId }: CompanyDashboardProps) {
                 <p className="text-gray-600">Campaign management interface will be implemented here.</p>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="sequences" className="space-y-6">
+            <FollowUpSequences companyId={companyId} />
           </TabsContent>
 
           <TabsContent value="prompts" className="space-y-6">

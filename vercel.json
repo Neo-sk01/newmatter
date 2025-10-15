@@ -1,0 +1,9 @@
+{
+  "crons": [
+    {
+      "path": "/api/sequences/trigger-follow-ups",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
+
