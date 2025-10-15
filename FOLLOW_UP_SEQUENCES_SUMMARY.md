@@ -44,29 +44,33 @@ Created 5 new tables with complete relationships:
 ### 3. User Interface ✅
 **Component**: `src/components/FollowUpSequences.tsx`
 
-A beautiful, comprehensive UI with three tabs:
+A beautiful, comprehensive UI with three tabs - **all views are inline (no modals)**:
 
 #### Tab 1: Sequences
 - View all follow-up sequences
-- Create new sequences with multiple steps
-- Set delays in days and hours
+- **Inline create form** - expands on the page when you click "Create Sequence"
+- Add multiple steps with custom delays (days and hours)
 - Edit subject and body templates
 - Use variables like `{{firstName}}`, `{{company}}`, etc.
 - Activate/deactivate sequences
+- No modal popups - everything stays on the page
 
 #### Tab 2: Active Leads
 - See all leads currently in sequences
 - View current step (e.g., "Step 2 of 3")
 - See exact next follow-up time
+- **Expandable timeline** - click the eye icon to expand email history inline
 - Play/Pause/Stop controls for each lead
 - Status badges (active, paused, completed, cancelled)
+- No modals - timeline expands directly in the table
 
 #### Tab 3: Timeline View
-- Complete email history for each lead
+- Complete email history for all leads
 - Timestamps showing when emails were sent
 - Visual indicators for responses
 - "Next follow-up due" countdown
 - Beautiful timeline design with color coding
+- Everything visible on the page at once
 
 ### 4. Integration ✅
 
