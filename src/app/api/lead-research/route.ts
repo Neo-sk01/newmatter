@@ -32,15 +32,6 @@ const buildLeadContext = (lead: LeadPayload) => {
   return lines.join("\n");
 };
 
-const resolveOpenAIModelId = (identifier: unknown) => {
-  const fallback = "gpt-4o";
-  if (typeof identifier !== "string") return fallback;
-  const trimmed = identifier.trim();
-  if (!trimmed) return fallback;
-  const parts = trimmed.split(":");
-  return parts.length > 1 ? parts.slice(1).join(":") || fallback : trimmed;
-};
-
 const normalizeSources = (sources: Array<Record<string, unknown>> | undefined) => {
   if (!Array.isArray(sources)) return [];
   return sources
@@ -68,14 +59,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing lead payload." }, { status: 400 });
     }
 
-    const modelId = resolveOpenAIModelId(process.env.AI_RESEARCH_MODEL);
-    let model;
-    try {
-      model = openai(modelId);
-    } catch (error) {
-      console.warn('Falling back to default research model', error);
-      model = openai('gpt-4o');
-    }
+    // Web search preview tool requires gpt-4o-mini
+    // Override any configured model to ensure compatibility
+    const model = openai('gpt-4o-mini');
 
     const query = (customQuery || [lead.firstName, lead.lastName, lead.company, lead.title, lead.email]
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
