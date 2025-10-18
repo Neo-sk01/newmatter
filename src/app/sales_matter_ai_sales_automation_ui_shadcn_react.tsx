@@ -165,11 +165,7 @@ interface LeadList {
   leads: Lead[];
 }
 
-interface PromptConfig {
-  id: string;
-  name: string;
-  content: string;
-}
+// Prompt management removed - XYZ Formula is now the only system prompt
 
 const initialLeads: Lead[] = [
   {
@@ -210,97 +206,8 @@ const cloneDefaultLeadList = (): LeadList => ({
   leads: DEFAULT_LEAD_LIST.leads.map((lead) => ({ ...lead })),
 });
 
-// Default prompt library seeded with the provided few-shot instructions
-const DEFAULT_PROMPT_CONTENT = `### **Few-Shot Prompt for AI Agent**
-
-You are an expert B2B outreach copywriter.
-Your task is to write **personalized cold outreach emails** that sound natural, human, and conversational, not robotic or overly polished.
-
-**Writing style instructions:**
-
-* Vary sentence length and rhythm.
-* Mix short and long sentences, let thoughts flow like real human writing.
-* Small hesitations or cautious phrases are welcome ("perhaps," "I think," "it feels like").
-* Do not balance every argument too neatly. Let some thoughts feel unfinished or slightly tangential.
-* Keep tone professional but approachable, no slang.
-* Break into paragraphs where it feels natural.
-* Do **not** use em-dashes (-). Use commas or pauses instead.
-
-**Email structure:**
-
-1. **Subject line**: Reference the brand and South Africa's R250B LGBTIQ+ market.
-2. **Opening line**: Personalized recognition of their role, brand, or achievement.
-3. **Authority line**: Introduce MambaOnline as South Africa's leading LGBTIQ+ platform (40,000 monthly visitors, 23 years trust). Include stats: R250B annual purchasing power, 60% hold degrees, 44% in management, 76-83% prefer inclusive brands.
-4. **Alignment**: Connect their brand's priorities to opportunities with this audience. Suggest a few ideas (Pride campaigns, targeted ads, digital storytelling, editorials).
-5. **CTA**: Invite them to a quick chat next week.
-6. **Footer**: Always sign off as Nompilo Gwala with this exact block:
-
-\`\`\`
-Best regards,  
-Nompilo Gwala  
-Head of Commercial | MambaOnline  
-P.O. Box 413952, Craighall, 2024, South Africa  
-Tel: 072 304 8280 / 078 421 6022  
-Email: nompilo@mambaonline.com  
-"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."  
-\`\`\`
-
----
-
-### **Example 1 - Kerry Largier (Yuppiechef)**
-
-**Subject:** Partnering with Yuppiechef to Engage South Africa's R250B LGBTIQ+ Market
-
-Hi Kerry,
-
-I have been following your move to Yuppiechef and it feels like such a natural fit. Your path from fintech at Spot Money to wellness at Faithful to Nature shows you can adapt across industries, and that is not an easy thing to do.
-
-I am with MambaOnline, South Africa's leading LGBTIQ+ digital platform. We reach 40,000 monthly visitors and have built 23 years of community trust. The audience we serve represents R250B in annual purchasing power. Many hold degrees, 44 percent are in management, and 76 percent say they prefer brands that visibly support the community.
-
-I think Yuppiechef could do something special here. Pride campaigns, digital collaborations, or even smaller features could land well with our audience.
-
-Would you be open to a chat next week to explore?
-
-Best regards,
-Nompilo Gwala
-Head of Commercial | MambaOnline
-P.O. Box 413952, Craighall, 2024, South Africa
-Tel: 072 304 8280 / 078 421 6022
-Email: nompilo@mambaonline.com
-"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."
-
----
-
-### **Example 2 - Michelle Hewitt (Castle Lite)**
-
-**Subject:** Connecting Castle Lite with South Africa's R250B LGBTIQ+ Market
-
-Hi Michelle,
-
-Your career path from agency life at Ogilvy and FCB to leading communications for Castle Lite shows real depth in FMCG and liquor marketing. I admire how you have managed large, complex portfolios while still keeping campaigns bold and creative.
-
-I am with MambaOnline, South Africa's leading LGBTIQ+ digital platform. We have 40,000 monthly visitors and over 23 years of community trust. Our audience represents R250B in annual purchasing power. They are educated, many in leadership, and 83 percent prefer brands that align with inclusivity.
-
-Castle Lite already has a reputation for being progressive, but I think there is room to push further. Pride campaigns, lifestyle collaborations, or digital advertising could strengthen that identity with our community.
-
-Would you be open to a quick chat next week to discuss possibilities?
-
-Best regards,
-Nompilo Gwala
-Head of Commercial | MambaOnline
-P.O. Box 413952, Craighall, 2024, South Africa
-Tel: 072 304 8280 / 078 421 6022
-Email: nompilo@mambaonline.com
-"South Africa's #1 LGBTIQ+ platform trusted by brands and community since 2001."
-`
-
-const DEFAULT_PROMPTS: PromptConfig[] = [
-  {
-    id: "few-shot-nompilo",
-    name: "Few-Shot | Nompilo Outreach",
-    content: DEFAULT_PROMPT_CONTENT,
-  },
-];
+// XYZ Formula (Burn Media Group) is the only prompt used in the system
+// It is managed as a constant in src/lib/prompts/xyz-formula.ts
 
 // ----------------------------------------------
 // Utility functions
@@ -521,17 +428,6 @@ function AppSidebar({
   onNewList,
   onRemoveList,
   onRenameList,
-  prompts,
-  activePromptId,
-  activePrompt,
-  onSelectPrompt,
-  onCreatePrompt,
-  onDuplicatePrompt,
-  onDeletePrompt,
-  onRenamePrompt,
-  onUpdatePromptContent,
-  onResetPrompt,
-  loadingPrompts,
   loadingLeadLists,
 }: {
   current: string;
@@ -542,38 +438,8 @@ function AppSidebar({
   onNewList: () => void;
   onRemoveList: (id: string) => void;
   onRenameList: (id: string, name: string) => void;
-  prompts: PromptConfig[];
-  activePromptId: string;
-  activePrompt: PromptConfig | null;
-  onSelectPrompt: (id: string) => void;
-  onCreatePrompt: () => void;
-  onDuplicatePrompt: (id: string) => void;
-  onDeletePrompt: (id: string) => void;
-  onRenamePrompt: (id: string, name: string) => void;
-  onUpdatePromptContent: (id: string, content: string) => void;
-  onResetPrompt: (id: string) => void;
-  loadingPrompts: boolean;
   loadingLeadLists: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showActivePrompt, setShowActivePrompt] = useState(true);
-
-  useEffect(() => {
-    return () => {
-      if (copyTimer.current) {
-        clearTimeout(copyTimer.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (copyTimer.current) {
-      clearTimeout(copyTimer.current);
-      copyTimer.current = null;
-    }
-    setCopied(false);
-  }, [activePromptId]);
   const items: { key: string; label: string; icon: React.ReactNode }[] = [
     { key: "import", label: "Import", icon: <CloudUpload className="h-5 w-5" /> },
     { key: "enrich", label: "Enrich", icon: <Database className="h-5 w-5" /> },
@@ -649,129 +515,7 @@ function AppSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator />
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <span className="flex-1">
-              Prompt Library
-              {loadingPrompts && <span className="ml-1 text-[10px] lowercase text-muted-foreground"> loading…</span>}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="rounded-xl text-xs"
-              onClick={onCreatePrompt}
-              disabled={loadingPrompts}
-            >
-              <Sparkles className="mr-2 h-4 w-4" /> New
-            </Button>
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="space-y-2">
-            {prompts.map((prompt) => (
-              <SidebarPromptRow
-                key={prompt.id}
-                prompt={prompt}
-                active={activePromptId === prompt.id}
-                onSelect={() => onSelectPrompt(prompt.id)}
-                onRename={(name) => onRenamePrompt(prompt.id, name)}
-                onDelete={() => onDeletePrompt(prompt.id)}
-                onDuplicate={() => onDuplicatePrompt(prompt.id)}
-                disableDelete={prompts.length <= 1}
-              />
-            ))}
-            {prompts.length === 0 && (
-              <div className="px-1 text-xs text-muted-foreground">No prompts yet. Add one to get started.</div>
-            )}
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {activePrompt && (
-          <SidebarGroup>
-            <SidebarGroupLabel className="flex items-center justify-between">
-              <Label htmlFor="active-prompt-editor" className="text-xs uppercase tracking-wide text-muted-foreground">
-                Active prompt
-              </Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-xl h-7 px-2 text-xs"
-                onClick={() => setShowActivePrompt((prev) => !prev)}
-              >
-                {showActivePrompt ? "Hide" : "Show"}
-              </Button>
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              {showActivePrompt ? (
-                <ScrollArea className="max-h-[420px] pr-1">
-                  <div className="space-y-2 pb-2">
-                    <Textarea
-                      id="active-prompt-editor"
-                      value={activePrompt.content}
-                      onChange={(e) => onUpdatePromptContent(activePrompt.id, e.target.value)}
-                      className="h-[320px] resize-none rounded-2xl border bg-background/60 text-sm"
-                      disabled={loadingPrompts}
-                    />
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => onDuplicatePrompt(activePrompt.id)}
-                        disabled={loadingPrompts}
-                      >
-                        <Copy className="mr-2 h-4 w-4" /> Duplicate
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={() => onResetPrompt(activePrompt.id)}
-                        disabled={loadingPrompts}
-                      >
-                        Reset
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-xl"
-                        onClick={async () => {
-                          if (typeof navigator === "undefined" || !navigator.clipboard) {
-                            console.warn("Clipboard API is unavailable in this environment");
-                            return;
-                          }
-                          try {
-                            await navigator.clipboard.writeText(activePrompt.content);
-                            setCopied(true);
-                            if (copyTimer.current) {
-                              clearTimeout(copyTimer.current);
-                            }
-                            copyTimer.current = setTimeout(() => setCopied(false), 2000);
-                          } catch (err) {
-                            console.error("Failed to copy prompt", err);
-                          }
-                        }}
-                        disabled={loadingPrompts}
-                      >
-                        <Copy className="mr-2 h-4 w-4" /> Copy
-                      </Button>
-                    </div>
-                    {copied && <div className="text-[11px] text-right text-muted-foreground">Prompt copied to clipboard</div>}
-                  </div>
-                </ScrollArea>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full rounded-xl"
-                  onClick={() => setShowActivePrompt(true)}
-                >
-                  Expand prompt
-                </Button>
-              )}
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
       </SidebarContent>
       <SidebarFooter className="pt-4">
         <div className="px-2 text-[11px] text-muted-foreground">
@@ -884,124 +628,7 @@ function SidebarListRow({
   );
 }
 
-function SidebarPromptRow({
-  prompt,
-  active,
-  onSelect,
-  onRename,
-  onDelete,
-  onDuplicate,
-  disableDelete,
-}: {
-  prompt: PromptConfig;
-  active: boolean;
-  onSelect: () => void;
-  onRename: (name: string) => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  disableDelete: boolean;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(prompt.name);
-
-  useEffect(() => {
-    setName(prompt.name);
-  }, [prompt.name]);
-
-  const commit = () => {
-    const trimmed = name.trim();
-    if (trimmed && trimmed !== prompt.name) {
-      onRename(trimmed);
-    }
-    setEditing(false);
-  };
-
-  const cancel = () => {
-    setName(prompt.name);
-    setEditing(false);
-  };
-
-  return (
-    <div className="flex items-center gap-2 px-1">
-      {!editing ? (
-        <>
-          <Button
-            variant={active ? "secondary" : "ghost"}
-            size="sm"
-            className={cx("flex-1 justify-start gap-2 rounded-xl text-sm min-w-0", active && "shadow")}
-            onClick={onSelect}
-          >
-            <AlignLeft className="h-5 w-5 flex-shrink-0" />
-            <span className="truncate">{prompt.name}</span>
-          </Button>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-xl h-7 w-7"
-              aria-label="Duplicate prompt"
-              onClick={onDuplicate}
-            >
-              <Copy className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-xl h-7 w-7"
-              aria-label="Rename prompt"
-              onClick={() => setEditing(true)}
-            >
-              <Edit3 className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-xl h-7 w-7"
-              aria-label="Delete prompt"
-              onClick={onDelete}
-              disabled={disableDelete}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        </>
-      ) : (
-        <div className="flex items-center gap-2 flex-1">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commit();
-              if (e.key === "Escape") cancel();
-            }}
-            className="rounded-xl flex-1 text-sm"
-            autoFocus
-          />
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="rounded-xl h-7 w-7"
-              aria-label="Save prompt name"
-              onClick={commit}
-            >
-              <Check className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-xl h-7 w-7"
-              aria-label="Cancel rename"
-              onClick={cancel}
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// SidebarPromptRow removed - prompt management no longer needed
 
 function Topbar() {
   return (
@@ -2701,76 +2328,13 @@ export default function SalesAutomationUI() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [generatingLeadId, setGeneratingLeadId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [prompts, setPrompts] = useState<PromptConfig[]>(DEFAULT_PROMPTS);
-  const [activePromptId, setActivePromptId] = useState<string>(DEFAULT_PROMPTS[0]?.id ?? "");
+  // Prompt management removed - XYZ Formula is the only system prompt
   const [supabaseAvailable, setSupabaseAvailable] = useState(isSupabaseEnvConfigured);
-  const [loadingPrompts, setLoadingPrompts] = useState(false);
   const [loadingLeadLists, setLoadingLeadLists] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const activePrompt = useMemo(() => {
-    if (prompts.length === 0) {
-      return null;
-    }
-    return prompts.find((p) => p.id === activePromptId) ?? prompts[0];
-  }, [prompts, activePromptId]);
-
-  const fetchPrompts = useCallback(async () => {
-    if (!isSupabaseEnvConfigured) {
-      setSupabaseAvailable(false);
-      setPrompts(DEFAULT_PROMPTS);
-      setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
-      return;
-    }
-
-    setLoadingPrompts(true);
-    try {
-      const response = await fetch("/api/prompts");
-      const data = await response.json().catch(() => ({ ok: false }));
-
-      if (!response.ok || data?.ok === false) {
-        const message = typeof data?.error === 'string' ? data.error : response.statusText;
-        if (data?.error?.includes('Supabase not configured') || data?.supabaseDisabled || response.status >= 500) {
-          setSupabaseAvailable(false);
-        }
-        if (message) {
-          console.warn('Prompt sync disabled:', message);
-        }
-        setPrompts(DEFAULT_PROMPTS);
-        setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
-        return;
-      }
-
-      const fetched: PromptApiPayload[] = Array.isArray(data?.data) ? (data.data as PromptApiPayload[]) : [];
-      if (!fetched.length) {
-        setPrompts(DEFAULT_PROMPTS);
-        setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
-        return;
-      }
-
-      const mapped: PromptConfig[] = fetched.map((prompt) => {
-        const versions = Array.isArray(prompt.versions) ? prompt.versions : [];
-        const latest = versions.at(-1);
-        return {
-          id: prompt.id,
-          name: prompt.name,
-          content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : DEFAULT_PROMPT_CONTENT,
-        };
-      });
-
-      setPrompts(mapped);
-      setActivePromptId(mapped[0]?.id ?? DEFAULT_PROMPTS[0]?.id ?? "");
-      setSupabaseAvailable(true);
-    } catch (error) {
-      console.error('Failed to load prompts', error);
-      setSupabaseAvailable(false);
-      setPrompts(DEFAULT_PROMPTS);
-      setActivePromptId(DEFAULT_PROMPTS[0]?.id ?? "");
-    } finally {
-      setLoadingPrompts(false);
-    }
-  }, [isSupabaseEnvConfigured, setSupabaseAvailable]);
+  // Prompt management removed - XYZ Formula is the only system prompt
 
   const persistLeadList = useCallback(async (listId: string, update: { name?: string; leads?: Lead[] }) => {
     if (!supabaseAvailable || !listId || !isUuid(listId)) return;
@@ -2928,9 +2492,9 @@ export default function SalesAutomationUI() {
   }, [isSupabaseEnvConfigured, resetToSampleLeadList, setSupabaseAvailable, updateLeads]);
 
   useEffect(() => {
-    fetchPrompts();
+    // Prompt fetching removed - XYZ Formula is the only system prompt
     fetchLeadLists();
-  }, [fetchPrompts, fetchLeadLists]);
+  }, [fetchLeadLists]);
 
   const createLeadListRemote = useCallback(async (name: string, leadsPayload: Lead[]) => {
     if (!supabaseAvailable) return null;
@@ -2979,200 +2543,7 @@ export default function SalesAutomationUI() {
     }
   }, [supabaseAvailable]);
 
-  const handlePromptContentChange = useCallback(async (id: string, content: string) => {
-    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content } : prompt)));
-
-    if (!supabaseAvailable) return;
-
-    try {
-      const response = await fetch(`/api/prompts/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newContent: content }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        console.error('Failed to save prompt content', error?.error ?? response.statusText);
-      }
-    } catch (error) {
-      console.error('Failed to save prompt content', error);
-    }
-  }, [supabaseAvailable]);
-
-  const handlePromptNameChange = useCallback(async (id: string, name: string) => {
-    const nextName = name.trim();
-    if (!nextName) return;
-
-    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, name: nextName } : prompt)));
-
-    if (!supabaseAvailable) return;
-
-    try {
-      const response = await fetch(`/api/prompts/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: nextName }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        if (error?.supabaseDisabled) {
-          setSupabaseAvailable(false);
-        }
-        console.error('Failed to rename prompt', error?.error ?? response.statusText);
-      }
-    } catch (error) {
-      console.error('Failed to rename prompt', error);
-    }
-  }, [supabaseAvailable]);
-
-  const handleCreatePrompt = useCallback(async () => {
-    const provisional: PromptConfig = {
-      id: createPromptId(),
-      name: 'New Prompt',
-      content: 'Describe the tone, structure, and examples you want the assistant to follow.',
-    };
-
-    if (!supabaseAvailable) {
-      setPrompts((prev) => [...prev, provisional]);
-      setActivePromptId(provisional.id);
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/prompts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: provisional.name, content: provisional.content }),
-      });
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok || data?.ok === false || !data?.data) {
-        if (response.status >= 500 || data?.supabaseDisabled) {
-          setSupabaseAvailable(false);
-        }
-        setPrompts((prev) => [...prev, provisional]);
-        setActivePromptId(provisional.id);
-        return;
-      }
-
-      const created = data.data as PromptApiPayload;
-      const versions = Array.isArray(created.versions) ? created.versions : [];
-      const latest = versions.at(-1);
-      const newPrompt: PromptConfig = {
-        id: created.id,
-        name: created.name,
-        content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : provisional.content,
-      };
-      setPrompts((prev) => [...prev, newPrompt]);
-      setActivePromptId(newPrompt.id);
-    } catch (error) {
-      console.error('Failed to create prompt', error);
-      setPrompts((prev) => [...prev, provisional]);
-      setActivePromptId(provisional.id);
-    }
-  }, [supabaseAvailable]);
-
-  const handleDuplicatePrompt = useCallback(async (id: string) => {
-    const source = prompts.find((p) => p.id === id);
-    if (!source) return;
-
-    const provisional: PromptConfig = {
-      id: createPromptId(),
-      name: `${source.name} Copy`,
-      content: source.content,
-    };
-
-    if (!supabaseAvailable) {
-      setPrompts((prev) => [...prev, provisional]);
-      setActivePromptId(provisional.id);
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/prompts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: provisional.name, content: provisional.content }),
-      });
-      const data = await response.json().catch(() => null);
-
-      if (!response.ok || data?.ok === false || !data?.data) {
-        if (response.status >= 500 || data?.supabaseDisabled) {
-          setSupabaseAvailable(false);
-        }
-        setPrompts((prev) => [...prev, provisional]);
-        setActivePromptId(provisional.id);
-        return;
-      }
-
-      const created = data.data as PromptApiPayload;
-      const versions = Array.isArray(created.versions) ? created.versions : [];
-      const latest = versions.at(-1);
-      const newPrompt: PromptConfig = {
-        id: created.id,
-        name: created.name,
-        content: typeof latest?.body === 'string' && latest.body.trim() ? latest.body : provisional.content,
-      };
-      setPrompts((prev) => [...prev, newPrompt]);
-      setActivePromptId(newPrompt.id);
-    } catch (error) {
-      console.error('Failed to duplicate prompt', error);
-      setPrompts((prev) => [...prev, provisional]);
-      setActivePromptId(provisional.id);
-    }
-  }, [prompts, supabaseAvailable]);
-
-  const handleDeletePrompt = useCallback(async (id: string) => {
-    setPrompts((prev) => {
-      if (prev.length <= 1) return prev;
-      const next = prev.filter((prompt) => prompt.id !== id);
-      if (next.length === prev.length) return prev;
-      if (id === activePromptId) {
-        setActivePromptId(next[0]?.id ?? "");
-      }
-      return next;
-    });
-
-    if (!supabaseAvailable) return;
-
-    try {
-      const response = await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        if (error?.supabaseDisabled) {
-          setSupabaseAvailable(false);
-        }
-        console.error('Failed to delete prompt', error?.error ?? response.statusText);
-      }
-    } catch (error) {
-      console.error('Failed to delete prompt', error);
-    }
-  }, [activePromptId, supabaseAvailable]);
-
-  const handleResetPrompt = useCallback(async (id: string) => {
-    setPrompts((prev) => prev.map((prompt) => (prompt.id === id ? { ...prompt, content: DEFAULT_PROMPT_CONTENT } : prompt)));
-
-    if (!supabaseAvailable) return;
-
-    try {
-      const response = await fetch(`/api/prompts/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newContent: DEFAULT_PROMPT_CONTENT }),
-      });
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        if (error?.supabaseDisabled) {
-          setSupabaseAvailable(false);
-        }
-        console.error('Failed to reset prompt', error?.error ?? response.statusText);
-      }
-    } catch (error) {
-      console.error('Failed to reset prompt', error);
-    }
-  }, [supabaseAvailable]);
+  // All prompt handler functions removed - XYZ Formula is the only system prompt
 
   const handleSelectLeadId = (id: string | null) => {
     setGenerateError(null);
@@ -3446,13 +2817,13 @@ export default function SalesAutomationUI() {
       const researchSummarySection = approvedResearchSummary
         ? `\nResearch summary (approved):\n${approvedResearchSummary}\n`
         : '';
-      const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}${researchSummarySection}\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic. Respond with valid JSON in the shape {"subject": "...", "body": "..."}.`;
+      const prompt = `Recipient details:\n- Name: ${lead.firstName} ${lead.lastName}\n- Company: ${lead.company}\n- Title: ${lead.title || ""}\n- Email: ${lead.email}\n- Website: ${lead.website || "Not provided"}\n- LinkedIn: ${lead.linkedin || "Not provided"}${researchSummarySection}\nUse the base subject idea "${baseSubject}" and draw inspiration from this template:\n"""${baseTemplate}"""\n\nGenerate a refreshed cold outreach email that feels human and authentic.`;
 
       const response = await fetch("/api/generate-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          system: activePrompt?.content ?? DEFAULT_PROMPT_CONTENT,
+          // No system prompt sent - API will use XYZ Formula (Burn Media Group) as the constant
           prompt,
           researchSummary: approvedResearchSummary || undefined,
           lead: {
@@ -3481,7 +2852,9 @@ export default function SalesAutomationUI() {
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
           nextSubject = typeof parsed.subject === "string" ? parsed.subject.trim() : "";
-          nextBody = typeof parsed.body === "string" ? parsed.body.trim() : "";
+          // SalesMatter prompt uses "email" key, fallback to "body" for backward compatibility
+          nextBody = typeof parsed.email === "string" ? parsed.email.trim() : 
+                     typeof parsed.body === "string" ? parsed.body.trim() : "";
         }
       } catch (err) {
         console.warn("Failed to parse AI response as JSON", err);
@@ -3504,6 +2877,15 @@ export default function SalesAutomationUI() {
         } else {
           nextBody = raw;
         }
+      }
+
+      // Remove em dashes (—) from both subject and body as per SalesMatter style rules
+      // Replace with space, comma, or period depending on context
+      if (nextSubject) {
+        nextSubject = nextSubject.replace(/—/g, " - ");
+      }
+      if (nextBody) {
+        nextBody = nextBody.replace(/—/g, " - ");
       }
 
       setEmails((prev) => ({
@@ -3690,17 +3072,6 @@ export default function SalesAutomationUI() {
           onNewList={newEmptyList}
           onRemoveList={removeListById}
           onRenameList={renameList}
-          prompts={prompts}
-          activePromptId={activePrompt?.id ?? ""}
-          activePrompt={activePrompt}
-          onSelectPrompt={setActivePromptId}
-          onCreatePrompt={handleCreatePrompt}
-          onDuplicatePrompt={handleDuplicatePrompt}
-          onDeletePrompt={handleDeletePrompt}
-          onRenamePrompt={handlePromptNameChange}
-          onUpdatePromptContent={handlePromptContentChange}
-          onResetPrompt={handleResetPrompt}
-          loadingPrompts={loadingPrompts}
           loadingLeadLists={loadingLeadLists}
         />
         <SidebarInset className="bg-gradient-to-b from-background to-muted/30 flex min-h-svh flex-col">

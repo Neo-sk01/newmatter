@@ -1,6 +1,7 @@
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { getXYZFormulaMasterPrompt, getPromptVersion } from "@/lib/prompts/xyz-formula";
 
 function resolveModel(identifier: unknown) {
   const fallbackIdentifier = process.env.AI_EMAIL_MODEL ?? "openai:gpt-4o-mini";
@@ -42,13 +43,16 @@ export async function POST(req: Request) {
       return new Response(message, { status: 400 });
     }
 
+    // Use XYZ Formula master prompt if system prompt not provided
+    const systemPrompt = system ?? getXYZFormulaMasterPrompt();
+
     const compiledPrompt = researchSummary
       ? `${prompt.trim()}\n\nApproved research summary (max 100 words):\n${researchSummary}\n\nPersonalize the outreach by referencing at least one insight from the summary. Do not repeat the summary verbatim.`
       : prompt;
 
     const result = await generateText({
       model,
-      system,
+      system: systemPrompt,
       prompt: compiledPrompt,
       maxOutputTokens: 700,
       temperature: 0.7,
@@ -60,6 +64,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
+        "X-Prompt-Version": getPromptVersion(),
       },
     });
   } catch (e) {
