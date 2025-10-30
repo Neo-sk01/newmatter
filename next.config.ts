@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import MiniCssExtractPlugin from "mini-css-extract-plugin";
 
 const nextConfig: NextConfig = {
+  turbopack: {},
   webpack(config) {
     const hasMiniCssPlugin = config.plugins?.some(
       (plugin: any) => plugin instanceof MiniCssExtractPlugin

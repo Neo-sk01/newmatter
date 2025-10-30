@@ -3017,24 +3017,75 @@ export default function SalesAutomationUI() {
 
   // Simulate sending with batches
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | undefined;
-    if (sending) {
-      const total = approvedCount || 1;
+    let cancelled = false;
+
+    const sendEmailsSequentially = async () => {
+      if (!sending) return;
+
+      const approvedLeads = leads.filter((l) => l.status === "approved");
+      const total = approvedLeads.length;
+
+      if (total === 0) {
+        setSending(false);
+        return;
+      }
+
       let sent = 0;
-      timer = setInterval(() => {
-        sent = Math.min(total, sent + Math.max(1, Math.floor(batchSize / 4)));
-        setProgress(Math.round((sent / total) * 100));
-        if (sent >= total) {
-          if (timer) clearInterval(timer);
-          setSending(false);
-          updateLeads((prev) => prev.map((l) => (l.status === "approved" ? { ...l, status: "sent" } : l)));
+      setProgress(0);
+
+      for (const lead of approvedLeads) {
+        if (cancelled || !sending) break;
+
+        const email = emails[lead.id];
+        if (!email) continue;
+
+        try {
+          // Send email via Everlytic API
+          const response = await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject: email.subject,
+              body: email.body,
+              recipientEmail: lead.email,
+              recipientName: `${lead.firstName} ${lead.lastName}`,
+              fromEmail: "nompilo@mambaonline.com",
+              fromName: "Nompilo Gwala - Burn Media Group",
+              replyEmail: "nompilo@mambaonline.com",
+            }),
+          });
+
+          if (response.ok) {
+            // Mark as sent
+            updateLeads((prev) =>
+              prev.map((l) => (l.id === lead.id ? { ...l, status: "sent" } : l))
+            );
+            sent++;
+            setProgress(Math.round((sent / total) * 100));
+          } else {
+            console.error(`Failed to send email to ${lead.email}`);
+          }
+        } catch (error) {
+          console.error(`Error sending email to ${lead.email}:`, error);
         }
-      }, 800);
-    }
-    return () => {
-      if (timer) clearInterval(timer);
+
+        // Delay between sends to respect rate limits (batch size controls this)
+        const delayMs = Math.max(100, Math.floor(1000 / (batchSize / 10)));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+
+      setSending(false);
+      setProgress(100);
     };
-  }, [sending, approvedCount, batchSize, updateLeads]);
+
+    if (sending) {
+      sendEmailsSequentially();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sending, leads, emails, batchSize, updateLeads]);
 
   const startSending = () => {
     if (approvedCount === 0) return;

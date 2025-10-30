@@ -41,12 +41,32 @@ yarn
 
 2) Configure environment
 
-Create a `.env.local` file in the project root with your OpenAI API key. Optionally override the model used for the Enrich tab's research summaries:
+Create a `.env.local` file in the project root with your OpenAI API key and Everlytic credentials. Optionally override the model used for the Enrich tab's research summaries:
 
 ```bash
+# Required for AI email generation
 OPENAI_API_KEY=sk-...
+
 # Optional: override GPT model for research summaries (defaults to gpt-4o)
 AI_RESEARCH_MODEL=gpt-4o
+
+# Required for sending emails via Everlytic
+EVERLYTIC_API_URL=https://api.everlytic.net
+EVERLYTIC_USERNAME=administrator
+EVERLYTIC_API_KEY=your-api-key-here
+```
+
+**Important:** Before sending emails, ensure your sender domain is verified in Everlytic:
+1. Log in to [Everlytic dashboard](https://login.everlytic.net)
+2. Navigate to Settings → Domains
+3. Add your domain and complete DNS verification (SPF, DKIM records)
+4. Wait for verification to complete
+
+You can test your Everlytic configuration by visiting `/api/test-email` or running:
+```bash
+curl -X POST http://localhost:3000/api/test-email \
+  -H "Content-Type: application/json" \
+  -d '{"recipientEmail": "your-email@example.com"}'
 ```
 
 3) Run the dev server
@@ -63,7 +83,8 @@ Visit http://localhost:3000
 - The main UI lives in `src/app/sales_matter_ai_sales_automation_ui_shadcn_react.tsx` and is rendered on `src/app/page.tsx` and `src/app/salesmatter/page.tsx`.
 - AI generation streams from the API route `src/app/api/generate-email/route.ts`, using the Vercel AI SDK. It reads `OPENAI_API_KEY` from your environment and optionally honors `AI_EMAIL_MODEL` (format `provider:model`, e.g. `openai:gpt-4o-mini`).
 - CSV → JSON mapping uses `src/app/api/map-csv/route.ts`. The client parses the CSV (Papaparse) and sends header names with a small sample of rows. The endpoint asks the model to map arbitrary headers to the canonical fields: `firstName`, `lastName`, `company`, `email`, `title`, `website`, `linkedin`. The client applies this mapping to the entire CSV locally. If the model is unavailable, a heuristic fallback mapping is used.
-- CRM connections, enrichment providers, and SMTP sending are demo UIs. Sending and metrics are simulated for prototyping purposes.
+- Email sending uses Everlytic's transactional email API via `src/app/api/send-email/route.ts`. Supports single and batch sending with personalization, tracking, and campaign grouping. Test the integration with `src/app/api/test-email/route.ts`.
+- CRM connections and enrichment providers are demo UIs. Metrics are simulated for prototyping purposes.
 
 ## Project Structure
 
@@ -92,7 +113,8 @@ The app is ready for deployment on Vercel or any Node hosting that supports Next
 
 ## Notes & Limitations
 
-- The enrichment, CRM connections, SMTP settings, and send flow are illustrative and not integrated with external services.
+- The enrichment and CRM connections are illustrative and not integrated with external services.
+- Email sending is fully functional via Everlytic's transactional email API. Requires valid `EVERLYTIC_API_KEY` and verified sender domain.
 - The analytics panel displays example KPIs and charts for demonstration.
 - AI generation requires a valid `OPENAI_API_KEY`. Usage may incur costs from your model provider.
 
