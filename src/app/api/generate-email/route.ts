@@ -1,6 +1,10 @@
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
+import { observe, updateActiveTrace, updateActiveObservation } from "@langfuse/tracing";
+import { after } from "next/server";
+import { langfuseSpanProcessor } from "@/lib/langfuse/span-processor";
+import { getPrompt } from "@/lib/langfuse/prompts";
 
 function resolveModel(identifier: unknown) {
   const fallbackIdentifier = process.env.AI_EMAIL_MODEL ?? "openai:gpt-4o-mini";
@@ -22,13 +26,37 @@ function resolveModel(identifier: unknown) {
   }
 }
 
-export async function POST(req: Request) {
+const handler = async (req: Request) => {
   try {
     const body = await req.json();
     const prompt = body?.prompt;
     const system = body?.system as string | undefined;
     const modelIdentifier = body?.model ?? body?.modelIdentifier;
     const researchSummary = typeof body?.researchSummary === "string" ? body.researchSummary.trim() : "";
+
+    // Update trace with metadata
+    updateActiveTrace({
+      name: "generate-email",
+      userId: body?.userId,
+      sessionId: body?.sessionId,
+      tags: ["email-generation", "ai-sdk"],
+      input: {
+        prompt,
+        system,
+        modelIdentifier,
+        hasResearchSummary: !!researchSummary,
+      },
+    });
+
+    // Update observation with input
+    updateActiveObservation({
+      input: {
+        prompt,
+        system,
+        modelIdentifier,
+        hasResearchSummary: !!researchSummary,
+      },
+    });
 
     if (!prompt || typeof prompt !== "string") {
       return new Response("Invalid prompt", { status: 400 });
@@ -52,9 +80,32 @@ export async function POST(req: Request) {
       prompt: compiledPrompt,
       maxOutputTokens: 700,
       temperature: 0.7,
+      experimental_telemetry: {
+        isEnabled: true,
+        metadata: {
+          // Future: Add langfusePrompt here when prompts are migrated
+        },
+      },
     });
 
     const textResponse = result.text?.trim() ?? "";
+
+    // Update observation with output
+    updateActiveObservation({
+      output: {
+        text: textResponse,
+        usage: result.usage,
+      },
+    });
+
+    // Flush traces in serverless environment
+    after(async () => {
+      try {
+        await langfuseSpanProcessor.forceFlush();
+      } catch (error) {
+        console.warn("Failed to flush Langfuse spans:", error);
+      }
+    });
 
     return new Response(textResponse, {
       headers: {
@@ -65,4 +116,8 @@ export async function POST(req: Request) {
   } catch (e) {
     return new Response("Failed to generate", { status: 500 });
   }
-}
+};
+
+export const POST = observe(handler, {
+  name: "generate-email",
+});
